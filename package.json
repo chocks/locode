@@ -1,8 +1,10 @@
 {
-  "name": "locode",
-  "version": "0.0.1",
-  "description": "",
-  "main": "index.js",
+  "name": "@chocks/locode",
+  "version": "0.1.0",
+  "description": "Local-first AI coding CLI. Routes tasks between Ollama and Claude to save tokens.",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "files": ["dist"],
   "directories": {
     "doc": "docs"
   },
@@ -10,15 +12,15 @@
     "build": "tsc",
     "dev": "ts-node src/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm test && npm run build"
   },
   "bin": {
     "locode": "./dist/src/index.js"
   },
-  "keywords": [],
+  "keywords": ["ai", "cli", "ollama", "claude", "llm", "coding-assistant"],
   "author": "Chocks Eswaramurthy",
   "url": "https://github.com/chocks/locode",
-  "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
