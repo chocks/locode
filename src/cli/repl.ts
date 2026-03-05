@@ -3,10 +3,13 @@ import { Orchestrator } from '../orchestrator/orchestrator'
 import { printResult, printStats } from './display'
 import type { Config } from '../config/schema'
 
-export async function startRepl(config: Config): Promise<void> {
-  const orch = new Orchestrator(config)
+export async function startRepl(config: Config, options?: { claudeOnly?: boolean; localOnly?: boolean }): Promise<void> {
+  const orch = new Orchestrator(config, undefined, undefined, options)
   if (orch.isLocalOnly()) {
-    console.log('[local-only mode] ANTHROPIC_API_KEY not set — all tasks routed to local LLM\n')
+    console.log('[local-only mode] All tasks routed to local LLM\n')
+  }
+  if (orch.isClaudeOnly()) {
+    console.log('[claude-only mode] All tasks routed to Claude\n')
   }
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 

@@ -9,6 +9,11 @@ export interface OrchestratorResult extends AgentResult {
   routeMethod: 'rule' | 'llm'
 }
 
+interface OrchestratorOptions {
+  localOnly?: boolean
+  claudeOnly?: boolean
+}
+
 export class Orchestrator {
   private router: Router
   private localAgent: LocalAgent
@@ -16,21 +21,38 @@ export class Orchestrator {
   private tracker: TokenTracker
   private config: Config
   private localOnly: boolean
+  private claudeOnly: boolean
 
-  constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent) {
+  constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent, options?: OrchestratorOptions) {
     this.config = config
     this.router = new Router(config)
     this.localAgent = localAgent ?? new LocalAgent(config)
     this.claudeAgent = claudeAgent ?? new ClaudeAgent(config)
     this.tracker = new TokenTracker(config.token_tracking)
-    this.localOnly = !process.env.ANTHROPIC_API_KEY
+    this.claudeOnly = options?.claudeOnly ?? false
+    this.localOnly = options?.localOnly ?? (!process.env.ANTHROPIC_API_KEY)
   }
 
   isLocalOnly(): boolean {
     return this.localOnly
   }
 
+  isClaudeOnly(): boolean {
+    return this.claudeOnly
+  }
+
   async process(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
+    if (this.claudeOnly) {
+      const result = await this.claudeAgent.run(prompt, previousSummary)
+      this.tracker.record({
+        agent: 'claude',
+        input: result.inputTokens,
+        output: result.outputTokens,
+        model: this.config.claude.model,
+      })
+      return { ...result, agent: 'claude', routeMethod: 'rule' }
+    }
+
     // In local-only mode, bypass router and always use local agent
     if (this.localOnly) {
       const result = await this.localAgent.run(prompt, previousSummary)

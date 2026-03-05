@@ -20,21 +20,24 @@ program
   .command('chat', { isDefault: true })
   .description('Start interactive REPL session')
   .option('-c, --config <path>', 'path to locode.yaml', getDefaultConfigPath())
+  .option('--claude-only', 'route all tasks to Claude')
+  .option('--local-only', 'route all tasks to local LLM')
   .action(async (opts) => {
     const config = loadConfig(path.resolve(opts.config))
-    await startRepl(config)
+    await startRepl(config, { claudeOnly: opts.claudeOnly, localOnly: opts.localOnly })
   })
 
 program
   .command('run <prompt>')
   .description('Single-shot task execution')
   .option('-c, --config <path>', 'path to locode.yaml', getDefaultConfigPath())
+  .option('--claude-only', 'route all tasks to Claude')
+  .option('--local-only', 'route all tasks to local LLM')
   .action(async (prompt, opts) => {
     const config = loadConfig(path.resolve(opts.config))
-    const orch = new Orchestrator(config)
-    if (orch.isLocalOnly()) {
-      console.error('[local-only mode] ANTHROPIC_API_KEY not set — using local LLM')
-    }
+    const orch = new Orchestrator(config, undefined, undefined, { claudeOnly: opts.claudeOnly, localOnly: opts.localOnly })
+    if (orch.isLocalOnly()) console.error('[local-only mode] Using local LLM')
+    if (orch.isClaudeOnly()) console.error('[claude-only mode] Using Claude')
     const result = await orch.process(prompt)
     console.log(result.content)
     process.exit(0)

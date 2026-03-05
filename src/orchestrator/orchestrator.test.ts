@@ -51,6 +51,18 @@ describe('Orchestrator', () => {
     if (savedKey) process.env.ANTHROPIC_API_KEY = savedKey
   })
 
+  it('routes everything to Claude when claudeOnly is true', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+    const mockLocal = { run: vi.fn() }
+    const mockClaude = { run: vi.fn().mockResolvedValue({ content: 'claude result', summary: 'summary', inputTokens: 500, outputTokens: 100 }) }
+    const orch = new Orchestrator(mockConfig, mockLocal as any, mockClaude as any, { claudeOnly: true })
+
+    const result = await orch.process('find all .ts files')  // would normally go local
+    expect(result.agent).toBe('claude')
+    expect(mockLocal.run).not.toHaveBeenCalled()
+    expect(mockClaude.run).toHaveBeenCalled()
+  })
+
   it('falls back to local when Claude throws', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key'
 

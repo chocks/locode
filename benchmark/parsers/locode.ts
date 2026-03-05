@@ -1,22 +1,26 @@
 export interface BenchmarkResult {
+  mode: 'hybrid' | 'claude-only' | 'local-only'
+  claudeInputTokens: number
+  claudeOutputTokens: number
+  estimatedCostUsd: number
+  durationMs: number
+  // keep these for routing breakdown
+  localInputTokens: number
+  localOutputTokens: number
+  localRoutingPct: number
+  localTurns: number
+  claudeTurns: number
+  // keep for compat
   tool: string
   inputTokens: number
   outputTokens: number
-  localInputTokens: number
-  localOutputTokens: number
-  claudeInputTokens: number
-  claudeOutputTokens: number
-  localRoutingPct: number
-  estimatedCostUsd: number
-  durationMs: number
-  localTurns: number
-  claudeTurns: number
 }
 
-export function parseLocodeStats(statsJson: string): Partial<BenchmarkResult> {
+export function parseLocodeStats(statsJson: string, mode: BenchmarkResult['mode']): Partial<BenchmarkResult> {
   try {
     const stats = JSON.parse(statsJson)
     return {
+      mode,
       tool: 'locode',
       inputTokens: stats.total.inputTokens,
       outputTokens: stats.total.outputTokens,
