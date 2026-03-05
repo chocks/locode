@@ -31,8 +31,12 @@ export class Router {
     }
 
     // No rule matched — use local LLM to decide
-    const agent = await this.resolveAmbiguous(prompt)
-    return { agent, method: 'llm', confidence: 0.6 }
+    const llmAgent = await this.resolveAmbiguous(prompt)
+    const confidence = 0.6
+
+    // If confidence is below threshold, escalate to Claude regardless of LLM decision
+    const agent = confidence < this.config.routing.escalation_threshold ? 'claude' : llmAgent
+    return { agent, method: 'llm', confidence }
   }
 
   private async defaultResolver(prompt: string): Promise<AgentType> {

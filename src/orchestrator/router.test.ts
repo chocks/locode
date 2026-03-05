@@ -33,12 +33,26 @@ describe('Router', () => {
     expect(decision.method).toBe('rule')
   })
 
-  it('uses local LLM for ambiguous tasks', async () => {
+  it('escalates to Claude for ambiguous tasks when confidence is below threshold', async () => {
     const mockResolve = vi.fn().mockResolvedValue('local')
     const router = new Router(mockConfig, mockResolve)
     const decision = await router.classify('help me with this code')
-    expect(decision.agent).toBe('local')
+    // confidence 0.6 < threshold 0.7 → escalates to claude
+    expect(decision.agent).toBe('claude')
     expect(decision.method).toBe('llm')
     expect(mockResolve).toHaveBeenCalled()
+  })
+
+  it('stays local for ambiguous tasks when threshold is low', async () => {
+    const lowThresholdConfig = {
+      ...mockConfig,
+      routing: { ...mockConfig.routing, escalation_threshold: 0.5 },
+    }
+    const mockResolve = vi.fn().mockResolvedValue('local')
+    const router = new Router(lowThresholdConfig, mockResolve)
+    const decision = await router.classify('help me with this code')
+    // confidence 0.6 > threshold 0.5 → stays local
+    expect(decision.agent).toBe('local')
+    expect(decision.method).toBe('llm')
   })
 })
