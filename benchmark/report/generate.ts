@@ -12,7 +12,7 @@ function calcCost(inputTokens: number, outputTokens: number): number {
 
 export function generateReport(results: BenchmarkResult[], outputPath: string): void {
   const templateSrc = fs.readFileSync(path.join(__dirname, 'template.html'), 'utf8')
-  Handlebars.registerHelper('ifCond', function(v1: unknown, v2: unknown, options: Handlebars.HelperOptions) {
+  Handlebars.registerHelper('ifCond', function(this: unknown, v1: unknown, v2: unknown, options: Handlebars.HelperOptions) {
     return v1 === v2 ? options.fn(this) : options.inverse(this)
   })
   const template = Handlebars.compile(templateSrc)

@@ -13,7 +13,7 @@
     "test:watch": "vitest"
   },
   "bin": {
-    "locode": "./dist/index.js"
+    "locode": "./dist/src/index.js"
   },
   "keywords": [],
   "author": "",

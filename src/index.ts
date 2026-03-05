@@ -5,6 +5,7 @@ import { startRepl } from './cli/repl'
 import { Orchestrator } from './orchestrator/orchestrator'
 import { runInstall } from './cli/install'
 import { runSetup, loadEnvFile } from './cli/setup'
+import { runBenchmark, resolvePrompts } from './cli/benchmark'
 import path from 'path'
 
 loadEnvFile()
@@ -66,6 +67,24 @@ program
   .description('First-run setup wizard: install Ollama, pick a model, set API key')
   .action(async () => {
     await runSetup()
+  })
+
+program
+  .command('benchmark')
+  .description('Benchmark token cost across hybrid, claude-only, and local-only modes')
+  .option('-p, --prompt <prompt>', 'prompt to benchmark (repeatable)', (val: string, acc: string[]) => [...acc, val], [] as string[])
+  .option('-t, --task <file>', 'path to a markdown task file to use as the prompt')
+  .option('-o, --output <path>', 'path to save the HTML report', 'locode-benchmark-report.html')
+  .option('--no-open', 'do not auto-open the report in browser')
+  .option('-c, --config <path>', 'path to locode.yaml', getDefaultConfigPath())
+  .action(async (opts) => {
+    const config = loadConfig(path.resolve(opts.config))
+    const prompts = resolvePrompts({ prompt: opts.prompt, task: opts.task })
+    await runBenchmark(config, {
+      prompts,
+      output: path.resolve(opts.output),
+      open: opts.open,
+    })
   })
 
 program.parse()

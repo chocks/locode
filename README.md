@@ -73,13 +73,31 @@ Type `stats` in the REPL or press Ctrl+C to see token usage breakdown and estima
 
 ## Benchmark
 
-Compare token usage between Locode and using Claude for everything:
+Compare Claude token cost across 3 modes — run the same task and see exactly how much locode saves:
 
 ```bash
-npx ts-node benchmark/runner.ts
+# Run default benchmark (todo webapp task)
+locode benchmark
+
+# Benchmark a custom prompt
+locode benchmark --prompt "build a REST API with Express"
+
+# Benchmark with a task file
+locode benchmark --task ./my-task.md
+
+# Run multiple prompts
+locode benchmark --prompt "grep for all TODOs" --prompt "refactor the auth module"
+
+# Save report to custom path
+locode benchmark --output ./reports/$(date +%Y-%m-%d).html
 ```
 
-Opens an HTML report showing % of tasks handled locally and cost savings.
+Opens an HTML report showing Claude token usage and estimated cost across:
+- **claude-only** — baseline (everything goes to Claude)
+- **hybrid** — default mode (local handles simple tasks)
+- **local-only** — zero Claude cost
+
+Example output: `claude-only: $0.52 → hybrid: $0.08 → saved: 85%`
 
 ## Local Development
 
