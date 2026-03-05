@@ -4,7 +4,10 @@ import { loadConfig, getDefaultConfigPath } from './config/loader'
 import { startRepl } from './cli/repl'
 import { Orchestrator } from './orchestrator/orchestrator'
 import { runInstall } from './cli/install'
+import { runSetup, loadEnvFile } from './cli/setup'
 import path from 'path'
+
+loadEnvFile()
 
 const program = new Command()
 
@@ -53,6 +56,13 @@ program
       }
     }
     await runInstall({ model: targetModel })
+  })
+
+program
+  .command('setup')
+  .description('First-run setup wizard: install Ollama, pick a model, set API key')
+  .action(async () => {
+    await runSetup()
   })
 
 program.parse()

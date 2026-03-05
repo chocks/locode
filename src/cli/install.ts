@@ -5,7 +5,7 @@ export interface InstallOptions {
   model: string
 }
 
-function isOllamaInstalled(): boolean {
+export function isOllamaInstalled(): boolean {
   try {
     execFileSync('which', ['ollama'], { encoding: 'utf8' })
     return true
@@ -14,7 +14,7 @@ function isOllamaInstalled(): boolean {
   }
 }
 
-function isOllamaRunning(): boolean {
+export function isOllamaRunning(): boolean {
   try {
     execFileSync('ollama', ['list'], { encoding: 'utf8', timeout: 3000 })
     return true
@@ -23,7 +23,7 @@ function isOllamaRunning(): boolean {
   }
 }
 
-function installOllama(): void {
+export function installOllama(): void {
   const platform = os.platform()
   console.log('Ollama not found. Installing...')
 
@@ -54,7 +54,7 @@ function installOllama(): void {
   process.exit(1)
 }
 
-function startOllama(): void {
+export function startOllama(): void {
   const platform = os.platform()
   console.log('Starting Ollama daemon...')
   if (platform === 'darwin' || platform === 'linux') {
