@@ -11,7 +11,7 @@ That's it — run `locode setup` to handle the rest.
 ## Install
 
 ```bash
-npm install -g locode
+npm install -g @chocks/locode
 ```
 
 ## First-run Setup
@@ -178,3 +178,7 @@ Open an issue with:
 - OS and Node.js version
 - The task prompt that caused unexpected routing
 - Which agent was used vs. which you expected
+
+## Roadmap
+
+- [ ] GitHub Actions workflow to auto-publish on git tag push
