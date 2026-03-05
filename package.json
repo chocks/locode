@@ -1,0 +1,38 @@
+{
+  "name": "locode",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "bin": {
+    "locode": "./dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "commander": "^14.0.3",
+    "handlebars": "^4.7.8",
+    "js-yaml": "^4.1.1",
+    "ollama": "^0.6.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/handlebars": "^4.0.40",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.3.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

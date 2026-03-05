@@ -1,0 +1,5 @@
+node_modules/
+dist/
+*.log
+.locode/
+locode-benchmark-report.html
