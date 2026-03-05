@@ -11,8 +11,20 @@ npm install          # install deps
 npm test             # run vitest (must pass before any commit)
 npm run build        # tsc compile → dist/
 npm run dev          # ts-node src/index.ts (no build needed)
-node dist/index.js   # run compiled CLI
+./dist/src/index.js  # run compiled CLI (after build)
 ```
+
+## Dev Workflow
+
+All changes go through a branch + PR:
+```bash
+git checkout -b fix/<issue>   # or feat/<feature>
+# make changes, npm test, npm run build
+git push -u origin <branch>
+gh pr create --fill
+```
+
+Never commit directly to `main`. PRs require passing tests (`prepublishOnly` enforces this on publish).
 
 ## Non-negotiable Rules
 
