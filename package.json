@@ -5,22 +5,22 @@
   "license": "MIT",
   "engines": { "node": ">=18" },
   "files": ["dist"],
-  "directories": {
-    "doc": "docs"
-  },
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm test && npm run build"
+    "prepublishOnly": "npm run build && npm test"
   },
   "bin": {
     "locode": "./dist/src/index.js"
   },
   "keywords": ["ai", "cli", "ollama", "claude", "llm", "coding-assistant"],
   "author": "Chocks Eswaramurthy",
-  "url": "https://github.com/chocks/locode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chocks/locode"
+  },
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -31,7 +31,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/handlebars": "^4.0.40",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.3.3",
     "ts-node": "^10.9.2",
