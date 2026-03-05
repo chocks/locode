@@ -1,5 +1,7 @@
 # Locode
 
+[![npm](https://img.shields.io/npm/v/@chocks-dev/locode)](https://www.npmjs.com/package/@chocks-dev/locode)
+
 Local-first AI coding CLI. Routes simple tasks to a local LLM (Ollama), complex tasks to Claude. Saves tokens.
 
 ## Requirements
