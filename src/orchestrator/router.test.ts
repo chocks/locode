@@ -1,0 +1,44 @@
+import { describe, it, expect, vi } from 'vitest'
+import { Router } from './router'
+import type { Config } from '../config/schema'
+
+const mockConfig: Config = {
+  local_llm: { provider: 'ollama', model: 'qwen2.5-coder:7b', base_url: 'http://localhost:11434' },
+  claude: { model: 'claude-sonnet-4-6' },
+  routing: {
+    rules: [
+      { pattern: 'find|grep|search|ls|cat|read|explore|where is', agent: 'local' },
+      { pattern: 'git log|git diff|git status|git blame', agent: 'local' },
+      { pattern: 'refactor|architect|design|explain|review|generate|write tests', agent: 'claude' },
+    ],
+    ambiguous_resolver: 'local',
+    escalation_threshold: 0.7,
+  },
+  context: { handoff: 'summary', max_summary_tokens: 500 },
+  token_tracking: { enabled: true, log_file: '/tmp/test.log' },
+}
+
+describe('Router', () => {
+  it('routes grep task to local', async () => {
+    const router = new Router(mockConfig)
+    const decision = await router.classify('grep for all TODO comments in src/')
+    expect(decision.agent).toBe('local')
+    expect(decision.method).toBe('rule')
+  })
+
+  it('routes refactor task to claude', async () => {
+    const router = new Router(mockConfig)
+    const decision = await router.classify('refactor the auth module to use dependency injection')
+    expect(decision.agent).toBe('claude')
+    expect(decision.method).toBe('rule')
+  })
+
+  it('uses local LLM for ambiguous tasks', async () => {
+    const mockResolve = vi.fn().mockResolvedValue('local')
+    const router = new Router(mockConfig, mockResolve)
+    const decision = await router.classify('help me with this code')
+    expect(decision.agent).toBe('local')
+    expect(decision.method).toBe('llm')
+    expect(mockResolve).toHaveBeenCalled()
+  })
+})
