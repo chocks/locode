@@ -1,6 +1,6 @@
 {
   "name": "locode",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "",
   "main": "index.js",
   "directories": {
@@ -16,7 +16,8 @@
     "locode": "./dist/src/index.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "Chocks Eswaramurthy",
+  "url": "https://github.com/chocks/locode",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
