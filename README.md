@@ -80,3 +80,83 @@ npx ts-node benchmark/runner.ts
 ```
 
 Opens an HTML report showing % of tasks handled locally and cost savings.
+
+## Local Development
+
+```bash
+git clone https://github.com/your-org/locode
+cd locode
+npm install
+```
+
+**Run in dev mode** (no build step, uses `ts-node`):
+```bash
+npm run dev
+```
+
+**Run a single-shot command in dev mode:**
+```bash
+npx ts-node src/index.ts run "grep for TODOs in src/"
+```
+
+**Run tests:**
+```bash
+npm test           # run once
+npm run test:watch # watch mode
+```
+
+**Build:**
+```bash
+npm run build      # outputs to dist/
+```
+
+**Try the built CLI locally:**
+```bash
+npm run build && node dist/index.js
+```
+
+**Project structure:**
+```
+src/
+  cli/          # REPL, display, setup wizard, install command
+  config/       # Zod schema + YAML loader
+  agents/       # LocalAgent (Ollama) + ClaudeAgent (Anthropic SDK)
+  orchestrator/ # Router (rule-based + LLM fallback) + Orchestrator
+  tools/        # readFile, shell (allow-list), git tools
+  tracker/      # Token usage + cost estimation
+benchmark/
+  tasks/        # Benchmark task definitions
+  parsers/      # Stats parsers
+  report/       # HTML report generator
+docs/plans/     # Design doc + implementation plan
+```
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. **Fork and branch** — create a feature branch from `main`
+2. **Follow TDD** — write failing tests before implementation
+3. **Keep it focused** — one feature or fix per PR, no scope creep
+4. **Run the full suite** before opening a PR:
+   ```bash
+   npm test && npm run build
+   ```
+5. **Routing rules** — if adding new task categories, update `locode.yaml` defaults and document the pattern
+6. **Security** — the shell tool uses an allow-list; do not switch to a deny-list approach
+7. **No new dependencies** without discussion — bundle size matters for a CLI tool
+
+### Adding a new agent backend
+
+1. Implement the `AgentResult` interface from `src/agents/local.ts`
+2. Add a new entry to the config schema in `src/config/schema.ts`
+3. Wire it into `src/orchestrator/orchestrator.ts`
+4. Add routing rules to `locode.yaml`
+
+### Reporting issues
+
+Open an issue with:
+- Locode version (`locode --version`)
+- OS and Node.js version
+- The task prompt that caused unexpected routing
+- Which agent was used vs. which you expected
