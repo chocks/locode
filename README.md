@@ -11,7 +11,7 @@ That's it — run `locode setup` to handle the rest.
 ## Install
 
 ```bash
-npm install -g @chocks/locode
+npm install -g @chocks-dev/locode
 ```
 
 ## First-run Setup
