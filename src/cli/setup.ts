@@ -4,6 +4,7 @@ import * as os from 'os'
 import * as path from 'path'
 import { execFileSync } from 'child_process'
 import { isOllamaInstalled, isOllamaRunning, installOllama, startOllama } from './install'
+import { getDefaultConfigPath } from '../config/loader'
 
 const LOCODE_DIR = path.join(os.homedir(), '.locode')
 const ENV_FILE = path.join(LOCODE_DIR, '.env')
@@ -162,25 +163,25 @@ export async function runSetup(): Promise<void> {
   // Step 4: Update locode.yaml with selected model
   console.log('\nStep 4/4: Updating config\n')
   try {
-    const yamlPath = path.join(process.cwd(), 'locode.yaml')
+    const yamlPath = path.resolve(getDefaultConfigPath())
     if (fs.existsSync(yamlPath)) {
-      let yaml = fs.readFileSync(yamlPath, 'utf8')
-      yaml = yaml.replace(/model: .+/, `model: ${selectedModel}`)
-      // Only replace the first occurrence (local_llm.model)
-      const lines = yaml.split('\n')
+      const lines = fs.readFileSync(yamlPath, 'utf8').split('\n')
       let replaced = false
       const updated = lines.map(line => {
         if (!replaced && line.match(/^\s+model:/)) {
           replaced = true
-          return line.replace(/model: .+/, `model: ${selectedModel}`)
+          return line.replace(/model:\s*.+/, `model: ${selectedModel}`)
         }
         return line
       }).join('\n')
       fs.writeFileSync(yamlPath, updated)
-      console.log(`✓ locode.yaml updated with model: ${selectedModel}`)
+      console.log(`✓ ${yamlPath} updated with model: ${selectedModel}`)
+    } else {
+      console.log(`⚠ No locode.yaml found at ${yamlPath} — skipping config update`)
+      console.log(`  Run 'locode chat --config <path>' to use a custom config location`)
     }
-  } catch {
-    // non-fatal
+  } catch (err) {
+    console.error(`⚠ Could not update config: ${(err as Error).message}`)
   }
 
   console.log('\n╔════════════════════════════════╗')
