@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Locode Benchmark Report</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; background: #0d1117; color: #e6edf3; }
+    h1 { color: #58a6ff; }
+    .meta { color: #8b949e; margin-bottom: 2rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th { background: #161b22; padding: 12px; text-align: left; color: #58a6ff; }
+    td { padding: 12px; border-bottom: 1px solid #21262d; }
+    .saved { color: #3fb950; font-weight: bold; }
+    .highlight { background: #161b22; border-radius: 8px; padding: 20px; margin: 1rem 0; }
+    .big-number { font-size: 2.5rem; font-weight: bold; color: #3fb950; }
+    .label { font-size: 0.85rem; color: #8b949e; }
+  </style>
+</head>
+<body>
+  <h1>Locode Benchmark Report</h1>
+  <p class="meta">Generated: {{generatedAt}} | Task: {{taskName}}</p>
+
+  <div class="highlight">
+    <div class="big-number">{{localRoutingPct}}%</div>
+    <div class="label">tasks handled by local LLM</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Metric</th><th>Without Locode (Claude only)</th><th>With Locode</th><th>Saved</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Input tokens</td>
+        <td>{{claudeOnlyInputTokens}}</td>
+        <td>{{locodeInputTokens}}</td>
+        <td class="saved">{{savedInputTokensPct}}%</td>
+      </tr>
+      <tr>
+        <td>Output tokens</td>
+        <td>{{claudeOnlyOutputTokens}}</td>
+        <td>{{locodeOutputTokens}}</td>
+        <td class="saved">{{savedOutputTokensPct}}%</td>
+      </tr>
+      <tr>
+        <td>Estimated cost</td>
+        <td>${{claudeOnlyCost}}</td>
+        <td>${{locodeCost}}</td>
+        <td class="saved">${{savedCost}} ({{savedCostPct}}%)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Routing Breakdown</h2>
+  <table>
+    <thead>
+      <tr><th>Agent</th><th>Turns</th><th>Input Tokens</th><th>Output Tokens</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Local (Ollama)</td><td>{{localTurns}}</td><td>{{localInputTokens}}</td><td>{{localOutputTokens}}</td></tr>
+      <tr><td>Claude</td><td>{{claudeTurns}}</td><td>{{claudeInputTokens}}</td><td>{{claudeOutputTokens}}</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>
