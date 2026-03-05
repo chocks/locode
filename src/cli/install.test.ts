@@ -1,0 +1,37 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// Mock child_process to avoid actually running system commands
+vi.mock('child_process', () => ({
+  execSync: vi.fn(),
+  execFileSync: vi.fn(),
+  spawnSync: vi.fn(),
+  spawn: vi.fn(() => ({ unref: vi.fn() })),
+}))
+
+import { execFileSync } from 'child_process'
+
+describe('install helpers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('detects ollama as installed when which succeeds', async () => {
+    // We test the behavior indirectly via runInstall
+    // Since execFileSync('which', ['ollama']) is mocked to succeed,
+    // and execFileSync('ollama', ['list']) succeeds (daemon running),
+    // and execFileSync('ollama', ['pull', ...]) succeeds,
+    // runInstall should complete without process.exit
+    const mockExecFileSync = vi.mocked(execFileSync)
+    mockExecFileSync.mockReturnValue('') // all execFileSync calls succeed
+
+    const { runInstall } = await import('./install')
+
+    // Should not throw
+    await expect(runInstall({ model: 'qwen2.5-coder:7b' })).resolves.toBeUndefined()
+
+    // Should have checked for ollama, checked daemon, and pulled model
+    expect(mockExecFileSync).toHaveBeenCalledWith('which', ['ollama'], expect.any(Object))
+    expect(mockExecFileSync).toHaveBeenCalledWith('ollama', ['list'], expect.any(Object))
+    expect(mockExecFileSync).toHaveBeenCalledWith('ollama', ['pull', 'qwen2.5-coder:7b'], expect.any(Object))
+  })
+})

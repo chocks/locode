@@ -3,6 +3,7 @@ import { Command } from 'commander'
 import { loadConfig, getDefaultConfigPath } from './config/loader'
 import { startRepl } from './cli/repl'
 import { Orchestrator } from './orchestrator/orchestrator'
+import { runInstall } from './cli/install'
 import path from 'path'
 
 const program = new Command()
@@ -31,6 +32,24 @@ program
     const result = await orch.process(prompt)
     console.log(result.content)
     process.exit(0)
+  })
+
+program
+  .command('install [model]')
+  .description('Install Ollama and pull a local LLM model')
+  .option('-c, --config <path>', 'path to locode.yaml', getDefaultConfigPath())
+  .action(async (model, opts) => {
+    // Use model from arg, or fall back to config default
+    let targetModel = model
+    if (!targetModel) {
+      try {
+        const config = loadConfig(path.resolve(opts.config))
+        targetModel = config.local_llm.model
+      } catch {
+        targetModel = 'qwen2.5-coder:7b'
+      }
+    }
+    await runInstall({ model: targetModel })
   })
 
 program.parse()
