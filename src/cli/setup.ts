@@ -12,8 +12,7 @@ const ENV_FILE = path.join(LOCODE_DIR, '.env')
 const SUGGESTED_MODELS = [
   { name: 'qwen2.5-coder:7b', description: 'Recommended — fast, great for code (default)' },
   { name: 'qwen2.5-coder:14b', description: 'More capable, needs ~10GB RAM' },
-  { name: 'deepseek-coder:6.7b', description: 'Strong at code, lightweight' },
-  { name: 'codellama:7b', description: 'Meta code model' },
+  { name: 'qwen2.5-coder:3b', description: 'Lightweight, very fast' },
   { name: 'llama3.2:3b', description: 'General purpose, very fast' },
 ]
 
