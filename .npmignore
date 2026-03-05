@@ -1,0 +1,10 @@
+src/
+benchmark/
+docs/
+*.ts
+tsconfig.json
+locode.yaml
+vitest.config.ts
+.locode/
+*.test.js
+*.test.js.map
