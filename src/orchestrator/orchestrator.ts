@@ -14,8 +14,10 @@ export class Orchestrator {
   private localAgent: LocalAgent
   private claudeAgent: ClaudeAgent
   private tracker: TokenTracker
+  private config: Config
 
   constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent) {
+    this.config = config
     this.router = new Router(config)
     this.localAgent = localAgent ?? new LocalAgent(config)
     this.claudeAgent = claudeAgent ?? new ClaudeAgent(config)
@@ -36,7 +38,7 @@ export class Orchestrator {
       agent: decision.agent,
       input: result.inputTokens,
       output: result.outputTokens,
-      model: decision.agent === 'local' ? 'qwen2.5-coder:7b' : 'claude-sonnet-4-6',
+      model: decision.agent === 'local' ? this.config.local_llm.model : this.config.claude.model,
     })
 
     return { ...result, agent: decision.agent, routeMethod: decision.method }

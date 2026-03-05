@@ -17,8 +17,12 @@ export function generateReport(results: BenchmarkResult[], outputPath: string): 
   const savedCost = (parseFloat(claudeOnlyCost) - parseFloat(locodeCost)).toFixed(4)
   const savedCostPct = ((parseFloat(savedCost) / parseFloat(claudeOnlyCost)) * 100).toFixed(1)
 
-  const savedInputPct = (((claudeOnlyInputTokens - locode.claudeInputTokens) / claudeOnlyInputTokens) * 100).toFixed(1)
-  const savedOutputPct = (((claudeOnlyOutputTokens - locode.claudeOutputTokens) / claudeOnlyOutputTokens) * 100).toFixed(1)
+  const savedInputPct = claudeOnlyInputTokens > 0
+    ? (((claudeOnlyInputTokens - locode.claudeInputTokens) / claudeOnlyInputTokens) * 100).toFixed(1)
+    : '0.0'
+  const savedOutputPct = claudeOnlyOutputTokens > 0
+    ? (((claudeOnlyOutputTokens - locode.claudeOutputTokens) / claudeOnlyOutputTokens) * 100).toFixed(1)
+    : '0.0'
 
   const html = template({
     generatedAt: new Date().toLocaleString(),
@@ -34,8 +38,8 @@ export function generateReport(results: BenchmarkResult[], outputPath: string): 
     locodeCost,
     savedCost,
     savedCostPct,
-    localTurns: locode.localRoutingPct > 0 ? Math.round((locode.localRoutingPct / 100) * 10) : 0,
-    claudeTurns: Math.round(((100 - locode.localRoutingPct) / 100) * 10),
+    localTurns: locode.localTurns,
+    claudeTurns: locode.claudeTurns,
     localInputTokens: locode.localInputTokens,
     localOutputTokens: locode.localOutputTokens,
     claudeInputTokens: locode.claudeInputTokens,

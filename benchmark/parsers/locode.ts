@@ -9,6 +9,8 @@ export interface BenchmarkResult {
   localRoutingPct: number
   estimatedCostUsd: number
   durationMs: number
+  localTurns: number
+  claudeTurns: number
 }
 
 export function parseLocodeStats(statsJson: string): Partial<BenchmarkResult> {
@@ -24,6 +26,8 @@ export function parseLocodeStats(statsJson: string): Partial<BenchmarkResult> {
       claudeOutputTokens: stats.claude.outputTokens,
       localRoutingPct: stats.localRoutingPct,
       estimatedCostUsd: stats.total.estimatedCostUsd,
+      localTurns: stats.local.turns,
+      claudeTurns: stats.claude.turns,
     }
   } catch {
     return {}
