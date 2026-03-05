@@ -1,3 +1,4 @@
+import Ollama from 'ollama'
 import type { Config } from '../config/schema'
 
 export type AgentType = 'local' | 'claude'
@@ -35,8 +36,24 @@ export class Router {
   }
 
   private async defaultResolver(prompt: string): Promise<AgentType> {
-    // In production this calls Ollama to classify the prompt.
-    // For now, default to local for safety (saves tokens).
-    return 'local'
+    try {
+      const response = await Ollama.chat({
+        model: this.config.local_llm.model,
+        messages: [{
+          role: 'user',
+          content: `Classify this coding task. Reply with ONLY "local" or "claude".
+- "local": file reading, grep, search, shell commands, git queries, repo exploration
+- "claude": code generation, refactoring, architecture, writing tests, complex explanations
+
+Task: "${prompt}"
+
+Reply with one word only: local or claude`
+        }],
+      })
+      const answer = response.message.content.trim().toLowerCase()
+      return answer.startsWith('claude') ? 'claude' : 'local'
+    } catch {
+      return 'local' // fallback on error
+    }
   }
 }
