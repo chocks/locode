@@ -7,6 +7,8 @@ import { runInstall } from './cli/install'
 import { runSetup, loadEnvFile } from './cli/setup'
 import { runBenchmark, resolvePrompts } from './cli/benchmark'
 import path from 'path'
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { version } = require('../../package.json')
 
 loadEnvFile()
 
@@ -15,7 +17,7 @@ const program = new Command()
 program
   .name('locode')
   .description('Local-first AI coding CLI')
-  .version('0.1.0')
+  .version(version)
 
 program
   .command('chat', { isDefault: true })
