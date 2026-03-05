@@ -35,8 +35,7 @@ export class LocalAgent {
 
     const response = await Ollama.chat({
       model: this.config.local_llm.model,
-      messages,
-      system: SYSTEM_PROMPT,
+      messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
     })
 
     const content = response.message.content
