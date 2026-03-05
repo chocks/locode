@@ -25,4 +25,50 @@ describe('Orchestrator', () => {
     expect(mockLocal.run).toHaveBeenCalled()
     expect(mockClaude.run).not.toHaveBeenCalled()
   })
+
+  it('routes to local agent when ANTHROPIC_API_KEY is not set', async () => {
+    const savedKey = process.env.ANTHROPIC_API_KEY
+    delete process.env.ANTHROPIC_API_KEY
+
+    const mockLocal = { run: vi.fn().mockResolvedValue({ content: 'local result', summary: 'summary', inputTokens: 50, outputTokens: 20 }) }
+    const mockClaude = { run: vi.fn() }
+
+    // A prompt that would normally route to claude
+    const orchConfig = {
+      ...mockConfig,
+      routing: {
+        ...mockConfig.routing,
+        rules: [{ pattern: 'refactor', agent: 'claude' as const }],
+      },
+    }
+    const orch = new Orchestrator(orchConfig, mockLocal as any, mockClaude as any)
+
+    const result = await orch.process('refactor this function')
+    expect(result.agent).toBe('local')
+    expect(mockClaude.run).not.toHaveBeenCalled()
+    expect(orch.isLocalOnly()).toBe(true)
+
+    if (savedKey) process.env.ANTHROPIC_API_KEY = savedKey
+  })
+
+  it('falls back to local when Claude throws', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+
+    const mockLocal = { run: vi.fn().mockResolvedValue({ content: 'local fallback', summary: 'summary', inputTokens: 50, outputTokens: 20 }) }
+    const mockClaude = { run: vi.fn().mockRejectedValue(new Error('API unavailable')) }
+
+    const orchConfig = {
+      ...mockConfig,
+      routing: {
+        ...mockConfig.routing,
+        rules: [{ pattern: 'refactor', agent: 'claude' as const }],
+      },
+    }
+    const orch = new Orchestrator(orchConfig, mockLocal as any, mockClaude as any)
+
+    const result = await orch.process('refactor this function')
+    expect(result.agent).toBe('local')
+    expect(result.content).toBe('local fallback')
+    expect(mockLocal.run).toHaveBeenCalled()
+  })
 })

@@ -15,6 +15,7 @@ export class Orchestrator {
   private claudeAgent: ClaudeAgent
   private tracker: TokenTracker
   private config: Config
+  private localOnly: boolean
 
   constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent) {
     this.config = config
@@ -22,16 +23,39 @@ export class Orchestrator {
     this.localAgent = localAgent ?? new LocalAgent(config)
     this.claudeAgent = claudeAgent ?? new ClaudeAgent(config)
     this.tracker = new TokenTracker(config.token_tracking)
+    this.localOnly = !process.env.ANTHROPIC_API_KEY
+  }
+
+  isLocalOnly(): boolean {
+    return this.localOnly
   }
 
   async process(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
+    // In local-only mode, bypass router and always use local agent
+    if (this.localOnly) {
+      const result = await this.localAgent.run(prompt, previousSummary)
+      this.tracker.record({
+        agent: 'local',
+        input: result.inputTokens,
+        output: result.outputTokens,
+        model: this.config.local_llm.model,
+      })
+      return { ...result, agent: 'local', routeMethod: 'rule' }
+    }
+
     const decision = await this.router.classify(prompt)
 
     let result: AgentResult
-    if (decision.agent === 'local') {
-      result = await this.localAgent.run(prompt, previousSummary)
+    if (decision.agent === 'claude') {
+      try {
+        result = await this.claudeAgent.run(prompt, previousSummary)
+      } catch (err) {
+        console.error(`[fallback] Claude unavailable (${(err as Error).message}), using local agent`)
+        result = await this.localAgent.run(prompt, previousSummary)
+        decision.agent = 'local'
+      }
     } else {
-      result = await this.claudeAgent.run(prompt, previousSummary)
+      result = await this.localAgent.run(prompt, previousSummary)
     }
 
     this.tracker.record({

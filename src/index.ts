@@ -29,6 +29,9 @@ program
   .action(async (prompt, opts) => {
     const config = loadConfig(path.resolve(opts.config))
     const orch = new Orchestrator(config)
+    if (orch.isLocalOnly()) {
+      console.error('[local-only mode] ANTHROPIC_API_KEY not set — using local LLM')
+    }
     const result = await orch.process(prompt)
     console.log(result.content)
     process.exit(0)

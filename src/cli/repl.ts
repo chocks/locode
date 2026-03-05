@@ -5,6 +5,9 @@ import type { Config } from '../config/schema'
 
 export async function startRepl(config: Config): Promise<void> {
   const orch = new Orchestrator(config)
+  if (orch.isLocalOnly()) {
+    console.log('[local-only mode] ANTHROPIC_API_KEY not set — all tasks routed to local LLM\n')
+  }
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 
   console.log('locode — local-first AI coding CLI')
