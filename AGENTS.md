@@ -67,4 +67,4 @@ node dist/index.js   # run compiled CLI
 - Do not use `execSync` with shell strings — use `execFileSync` with arg arrays
 - Do not hardcode model names — always read from `config.local_llm.model` or `config.claude.model`
 - Do not break the `isLocalOnly()` fallback — it must work when `ANTHROPIC_API_KEY` is absent
-- Do not add config fields that are never read (escalation_threshold and max_summary_tokens are known exceptions to fix)
+- Do not add config fields that are never read

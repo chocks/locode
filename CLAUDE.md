@@ -56,7 +56,4 @@ Each module has a co-located test file (`*.test.ts`). External dependencies (Oll
 
 ## Known TODOs (not bugs, planned work)
 
-- `escalation_threshold` config field is parsed but not yet used in routing logic
-- `max_summary_tokens` config field is parsed but not enforced in `LocalAgent`
-- Local agent tools (`readFile`, `shell`, `git`) are implemented but not yet wired as Ollama function calls
-- Benchmark has no real Claude Code baseline — "Claude only" cost is estimated, not measured
+- Benchmark has no real Claude Code baseline — "Claude only" cost is estimated, not measured (requires Claude Code CLI installed and output parsing)
