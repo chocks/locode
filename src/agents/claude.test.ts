@@ -31,7 +31,7 @@ function makeCreateResponse(text: string, inputTokens: number, outputTokens: num
 }
 
 describe('ClaudeAgent', () => {
-  const config = { claude: { model: 'claude-sonnet-4-6', token_threshold: 0.99 } }
+  const config = { claude: { model: 'test-model', token_threshold: 0.99 } }
 
   beforeEach(() => {
     mockCreate.mockReturnValue(makeCreateResponse('Here is the refactored code.', 1500, 300))
@@ -67,6 +67,18 @@ describe('ClaudeAgent', () => {
     const summary = await agent.generateHandoffSummary('We were working on auth.')
     expect(typeof summary).toBe('string')
     expect(summary.length).toBeGreaterThan(0)
+  })
+
+  it('uses next midnight UTC as resetsAt when reset header is absent', async () => {
+    mockCreate.mockReturnValueOnce(makeCreateResponse('response', 100, 50, makeHeaders('1000', '100000', null)))
+    const agent = new ClaudeAgent(config)
+    const result = await agent.run('prompt')
+    expect(result.rateLimitInfo).not.toBeNull()
+    expect(result.rateLimitInfo!.tokensRemaining).toBe(1000)
+    // resetsAt should be midnight UTC — after now but within 24h
+    const now = Date.now()
+    expect(result.rateLimitInfo!.resetsAt).toBeGreaterThan(now)
+    expect(result.rateLimitInfo!.resetsAt).toBeLessThanOrEqual(now + 24 * 60 * 60 * 1000)
   })
 
   it('generateHandoffSummary falls back to truncated context on error', async () => {
