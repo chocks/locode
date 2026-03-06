@@ -17,7 +17,7 @@ describe('Orchestrator', () => {
   it('routes to local agent and records tokens', async () => {
     const mockLocal = { run: vi.fn().mockResolvedValue({ content: 'found files', summary: 'Found 3 files.', inputTokens: 100, outputTokens: 30 }) }
     const mockClaude = { run: vi.fn() }
-    const orch = new Orchestrator(mockConfig, mockLocal as any, mockClaude as any)
+    const orch = new Orchestrator(mockConfig, mockLocal as unknown as import('../agents/local').LocalAgent, mockClaude as unknown as import('../agents/claude').ClaudeAgent)
 
     const result = await orch.process('find all .ts files in src/')
     expect(result.agent).toBe('local')
@@ -41,7 +41,7 @@ describe('Orchestrator', () => {
         rules: [{ pattern: 'refactor', agent: 'claude' as const }],
       },
     }
-    const orch = new Orchestrator(orchConfig, mockLocal as any, mockClaude as any)
+    const orch = new Orchestrator(orchConfig, mockLocal as unknown as import('../agents/local').LocalAgent, mockClaude as unknown as import('../agents/claude').ClaudeAgent)
 
     const result = await orch.process('refactor this function')
     expect(result.agent).toBe('local')
@@ -55,7 +55,7 @@ describe('Orchestrator', () => {
     process.env.ANTHROPIC_API_KEY = 'test-key'
     const mockLocal = { run: vi.fn() }
     const mockClaude = { run: vi.fn().mockResolvedValue({ content: 'claude result', summary: 'summary', inputTokens: 500, outputTokens: 100 }) }
-    const orch = new Orchestrator(mockConfig, mockLocal as any, mockClaude as any, { claudeOnly: true })
+    const orch = new Orchestrator(mockConfig, mockLocal as unknown as import('../agents/local').LocalAgent, mockClaude as unknown as import('../agents/claude').ClaudeAgent, { claudeOnly: true })
 
     const result = await orch.process('find all .ts files')  // would normally go local
     expect(result.agent).toBe('claude')
@@ -76,7 +76,7 @@ describe('Orchestrator', () => {
         rules: [{ pattern: 'refactor', agent: 'claude' as const }],
       },
     }
-    const orch = new Orchestrator(orchConfig, mockLocal as any, mockClaude as any)
+    const orch = new Orchestrator(orchConfig, mockLocal as unknown as import('../agents/local').LocalAgent, mockClaude as unknown as import('../agents/claude').ClaudeAgent)
 
     const result = await orch.process('refactor this function')
     expect(result.agent).toBe('local')

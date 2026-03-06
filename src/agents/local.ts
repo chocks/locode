@@ -97,14 +97,14 @@ export class LocalAgent {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const response = await Ollama.chat({
         model: this.config.local_llm.model,
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages] as any,
-        tools: TOOLS as any,
+        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
+        tools: TOOLS as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
       })
 
       totalInputTokens += response.prompt_eval_count ?? 0
       totalOutputTokens += response.eval_count ?? 0
 
-      const toolCalls = (response.message as any).tool_calls
+      const toolCalls = (response.message as { content: string; tool_calls?: Array<{ function: { name: string; arguments: Record<string, string> } }> }).tool_calls
 
       // No tool calls — final response
       if (!toolCalls || toolCalls.length === 0) {
@@ -124,7 +124,7 @@ export class LocalAgent {
     // Fallback if max rounds exceeded — get final answer without tools
     const final = await Ollama.chat({
       model: this.config.local_llm.model,
-      messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages] as any,
+      messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
     })
     const content = final.message.content
     return {

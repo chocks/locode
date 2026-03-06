@@ -7,8 +7,8 @@ import { runInstall } from './cli/install'
 import { runSetup, loadEnvFile } from './cli/setup'
 import { runBenchmark, resolvePrompts } from './cli/benchmark'
 import path from 'path'
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { version } = require('../../package.json')
+import pkgJson from '../package.json'
+const { version } = pkgJson
 
 loadEnvFile()
 
