@@ -19,7 +19,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          registry-url: https://registry.npmjs.org
 
       - run: npm ci
+
+      - run: npm config delete //registry.npmjs.org/:_authToken
 
       - run: npm publish --provenance
