@@ -5,7 +5,7 @@ import { TokenTracker } from '../tracker/tracker'
 import type { Config } from '../config/schema'
 
 function isRateLimitError(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { status?: number }).status === 429
+  return err instanceof Error && 'status' in err && (err as { status: number }).status === 429
 }
 
 export interface OrchestratorResult extends AgentResult {
