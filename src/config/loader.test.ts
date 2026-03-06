@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { loadConfig } from './loader'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { loadConfig, getDefaultConfigPath } from './loader'
 import path from 'path'
+import os from 'os'
 
 describe('loadConfig', () => {
   it('loads and validates config from yaml file', () => {
@@ -12,5 +13,28 @@ describe('loadConfig', () => {
 
   it('throws on invalid config', () => {
     expect(() => loadConfig('/nonexistent/path.yaml')).toThrow()
+  })
+})
+
+describe('getDefaultConfigPath', () => {
+  let savedEnv: string | undefined
+
+  beforeEach(() => {
+    savedEnv = process.env.LOCODE_CONFIG
+    delete process.env.LOCODE_CONFIG
+  })
+
+  afterEach(() => {
+    if (savedEnv !== undefined) process.env.LOCODE_CONFIG = savedEnv
+    else delete process.env.LOCODE_CONFIG
+  })
+
+  it('returns ~/.locode/locode.yaml by default', () => {
+    expect(getDefaultConfigPath()).toBe(path.join(os.homedir(), '.locode', 'locode.yaml'))
+  })
+
+  it('returns LOCODE_CONFIG env var when set', () => {
+    process.env.LOCODE_CONFIG = '/custom/path/locode.yaml'
+    expect(getDefaultConfigPath()).toBe('/custom/path/locode.yaml')
   })
 })
