@@ -35,6 +35,7 @@ Never commit directly to `main`. PRs require passing tests (`prepublishOnly` enf
 5. **Shell allow-list** — `src/tools/shell.ts` uses `ALLOWED_COMMANDS` Set; never switch to deny-list
 6. **Config-driven models** — never hardcode `'qwen2.5-coder:7b'` or `'claude-sonnet-4-6'`; use `config.local_llm.model` and `config.claude.model`
 7. **No dead config** — if you add a field to `src/config/schema.ts`, wire it up somewhere
+8. **Never commit directly to `main`** — always create a branch (`git checkout -b feat/<name>` or `fix/<name>`), make changes there, then open a PR with `gh pr create`
 
 ## Key Files
 
