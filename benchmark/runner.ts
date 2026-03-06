@@ -1,4 +1,4 @@
-import { execSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { Orchestrator } from '../src/orchestrator/orchestrator'
@@ -40,7 +40,7 @@ async function main() {
   const reportPath = path.join(process.cwd(), 'locode-benchmark-report.html')
   generateReport(results, reportPath)
   console.log(`\nReport saved to: ${reportPath}`)
-  execSync(`open ${reportPath}`)
+  execFileSync('open', [reportPath])
 }
 
 main().catch(console.error)
