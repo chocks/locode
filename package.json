@@ -35,6 +35,9 @@
     "type": "git",
     "url": "https://github.com/chocks/locode"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
