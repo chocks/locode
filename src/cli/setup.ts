@@ -59,9 +59,9 @@ export function writeGlobalConfig(model: string, locodeDir: string = LOCODE_DIR)
 }
 
 const SUGGESTED_MODELS = [
-  { name: 'qwen2.5-coder:7b', description: 'Recommended — fast, great for code (default)' },
-  { name: 'qwen2.5-coder:14b', description: 'More capable, needs ~10GB RAM' },
-  { name: 'qwen2.5-coder:3b', description: 'Lightweight, very fast' },
+  { name: 'qwen3:8b', description: 'Recommended — fast, excellent for code (default)' },
+  { name: 'qwen3:14b', description: 'More capable, needs ~10GB RAM' },
+  { name: 'qwen3:4b', description: 'Lightweight, very fast' },
   { name: 'llama3.2:3b', description: 'General purpose, very fast' },
 ]
 
