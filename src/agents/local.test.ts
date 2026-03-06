@@ -24,7 +24,7 @@ describe('LocalAgent', () => {
       message: { content: 'The answer is 42.', tool_calls: [] },
       prompt_eval_count: 50,
       eval_count: 10,
-    } as any)
+    } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
   })
 
   it('returns a response and token counts', async () => {
@@ -63,12 +63,12 @@ describe('LocalAgent', () => {
         },
         prompt_eval_count: 30,
         eval_count: 5,
-      } as any)
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
       .mockResolvedValueOnce({
         message: { content: 'The output was: hello', tool_calls: [] },
         prompt_eval_count: 40,
         eval_count: 8,
-      } as any)
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
 
     const agent = new LocalAgent({ local_llm: { provider: 'ollama' as const, model: 'qwen2.5-coder:7b', base_url: 'http://localhost:11434' } })
     const result = await agent.run('what does echo hello output?')

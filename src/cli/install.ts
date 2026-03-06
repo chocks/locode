@@ -1,4 +1,4 @@
-import { execSync, execFileSync, spawnSync, spawn } from 'child_process'
+import { execSync, execFileSync, spawn } from 'child_process'
 import os from 'os'
 
 export interface InstallOptions {
