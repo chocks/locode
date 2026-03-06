@@ -1,35 +1,39 @@
 name: Publish
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 permissions:
-  contents: write
-  id-token: write
+  contents: write  # needed to create GitHub Releases
+  id-token: write  # needed for npm provenance attestation
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: '25'
+          cache: npm
           registry-url: 'https://registry.npmjs.org'
           scope: '@chocks-dev'
 
       - run: npm ci
-      - run: npm run build --if-present
+      - run: npm run build
       - run: npm test
 
-      - name: Bump version and push tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          npm version patch
-          git push --follow-tags
+      - name: Publish to npm
+        run: npm publish
 
-      - run: npm publish
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            --verify-tag

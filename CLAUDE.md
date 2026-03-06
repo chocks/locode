@@ -26,6 +26,36 @@ gh pr create --fill
 
 Never commit directly to `main`. PRs require passing tests (`prepublishOnly` enforces this on publish).
 
+## Release Process
+
+Releases are **tag-driven**. CI never commits to `main`. The publish workflow fires on any `v*` tag push.
+
+```bash
+# 1. Create a release branch from clean main
+git checkout main && git pull
+git checkout -b release/vX.Y.Z
+
+# 2. Bump version in package.json only (no commit, no tag)
+npm run release:patch   # or release:minor / release:major
+
+# 3. Commit the version bump and open a PR
+git add package.json package-lock.json
+git commit -S -m "chore: release vX.Y.Z"
+git push -u origin release/vX.Y.Z
+gh pr create --fill
+
+# 4. After PR is merged, push a signed tag from local main
+git checkout main && git pull
+VERSION="v$(node -p "require('./package.json').version")"
+git tag -s "$VERSION" -m "Release $VERSION"
+git push origin "$VERSION"
+```
+
+Key rules:
+- **Never run `npm version` without `--no-git-tag-version`** in the bump step — the tag must be created after merge, not before
+- **Never push the tag before the PR is merged** — the tag should point to the commit on `main`
+- The publish workflow (`.github/workflows/publish.yml`) handles build, test, npm publish, and GitHub Release creation automatically
+
 ## Non-negotiable Rules
 
 1. **TDD always** — write failing test, run it, implement, confirm pass, commit
