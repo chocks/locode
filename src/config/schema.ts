@@ -13,6 +13,7 @@ export const ConfigSchema = z.object({
   }),
   claude: z.object({
     model: z.string(),
+    token_threshold: z.number().min(0).max(1).default(0.99),
   }),
   routing: z.object({
     rules: z.array(RoutingRuleSchema),

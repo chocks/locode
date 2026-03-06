@@ -5,6 +5,7 @@ local_llm:
 
 claude:
   model: claude-sonnet-4-6
+  token_threshold: 0.99
 
 routing:
   rules:
