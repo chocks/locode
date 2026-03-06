@@ -19,4 +19,12 @@ describe('ConfigSchema', () => {
     const result = ConfigSchema.parse({ ...baseConfig, claude: { model: 'claude-sonnet-4-6', token_threshold: 0.95 } })
     expect(result.claude.token_threshold).toBe(0.95)
   })
+
+  it('rejects token_threshold above 1', () => {
+    expect(() => ConfigSchema.parse({ ...baseConfig, claude: { model: 'claude-sonnet-4-6', token_threshold: 1.01 } })).toThrow()
+  })
+
+  it('rejects token_threshold below 0', () => {
+    expect(() => ConfigSchema.parse({ ...baseConfig, claude: { model: 'claude-sonnet-4-6', token_threshold: -0.01 } })).toThrow()
+  })
 })
