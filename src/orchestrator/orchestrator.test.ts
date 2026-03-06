@@ -3,7 +3,7 @@ import { Orchestrator } from './orchestrator'
 
 const mockConfig = {
   local_llm: { provider: 'ollama' as const, model: 'qwen2.5-coder:7b', base_url: 'http://localhost:11434' },
-  claude: { model: 'claude-sonnet-4-6' },
+  claude: { model: 'claude-sonnet-4-6', token_threshold: 0.99 },
   routing: {
     rules: [{ pattern: 'grep|find|read', agent: 'local' as const }],
     ambiguous_resolver: 'local' as const,
