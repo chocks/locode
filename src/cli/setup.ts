@@ -4,10 +4,59 @@ import * as os from 'os'
 import * as path from 'path'
 import { execFileSync } from 'child_process'
 import { isOllamaInstalled, isOllamaRunning, installOllama, startOllama } from './install'
-import { getDefaultConfigPath } from '../config/loader'
 
 const LOCODE_DIR = path.join(os.homedir(), '.locode')
 const ENV_FILE = path.join(LOCODE_DIR, '.env')
+
+const CONFIG_TEMPLATE = (model: string) => `\
+local_llm:
+  provider: ollama
+  model: ${model}
+  base_url: http://localhost:11434
+
+claude:
+  model: claude-sonnet-4-6
+  token_threshold: 0.99
+
+routing:
+  rules:
+    - pattern: "find|grep|search|ls|cat|read|explore|where is"
+      agent: local
+    - pattern: "git log|git diff|git status|git blame"
+      agent: local
+    - pattern: "refactor|architect|design|explain|review|generate|write tests"
+      agent: claude
+  ambiguous_resolver: local
+  escalation_threshold: 0.7
+
+context:
+  handoff: summary
+  max_summary_tokens: 500
+
+token_tracking:
+  enabled: true
+  log_file: ~/.locode/usage.log
+`
+
+export function writeGlobalConfig(model: string, locodeDir: string = LOCODE_DIR): void {
+  fs.mkdirSync(locodeDir, { recursive: true })
+  const yamlPath = path.join(locodeDir, 'locode.yaml')
+  if (!fs.existsSync(yamlPath)) {
+    fs.writeFileSync(yamlPath, CONFIG_TEMPLATE(model))
+    return
+  }
+  // Update the local_llm model line in the existing config
+  const lines = fs.readFileSync(yamlPath, 'utf8').split('\n')
+  let replaced = false
+  const updated = lines.map(line => {
+    if (!replaced && line.match(/^\s+model:/)) {
+      replaced = true
+      return line.replace(/model:\s*.+/, `model: ${model}`)
+    }
+    return line
+  }).join('\n')
+  fs.writeFileSync(yamlPath, updated)
+}
 
 const SUGGESTED_MODELS = [
   { name: 'qwen2.5-coder:7b', description: 'Recommended — fast, great for code (default)' },
@@ -159,26 +208,12 @@ export async function runSetup(): Promise<void> {
     }
   }
 
-  // Step 4: Update locode.yaml with selected model
+  // Step 4: Write global config to ~/.locode/locode.yaml
   console.log('\nStep 4/4: Updating config\n')
   try {
-    const yamlPath = path.resolve(getDefaultConfigPath())
-    if (fs.existsSync(yamlPath)) {
-      const lines = fs.readFileSync(yamlPath, 'utf8').split('\n')
-      let replaced = false
-      const updated = lines.map(line => {
-        if (!replaced && line.match(/^\s+model:/)) {
-          replaced = true
-          return line.replace(/model:\s*.+/, `model: ${selectedModel}`)
-        }
-        return line
-      }).join('\n')
-      fs.writeFileSync(yamlPath, updated)
-      console.log(`✓ ${yamlPath} updated with model: ${selectedModel}`)
-    } else {
-      console.log(`⚠ No locode.yaml found at ${yamlPath} — skipping config update`)
-      console.log(`  Run 'locode chat --config <path>' to use a custom config location`)
-    }
+    writeGlobalConfig(selectedModel)
+    const globalYamlPath = path.join(LOCODE_DIR, 'locode.yaml')
+    console.log(`✓ ${globalYamlPath} updated with model: ${selectedModel}`)
   } catch (err) {
     console.error(`⚠ Could not update config: ${(err as Error).message}`)
   }

@@ -1,5 +1,7 @@
 import fs from 'fs'
 import yaml from 'js-yaml'
+import os from 'os'
+import path from 'path'
 import { ConfigSchema, Config } from './schema'
 
 export function loadConfig(filePath: string): Config {
@@ -14,5 +16,5 @@ export function loadConfig(filePath: string): Config {
 }
 
 export function getDefaultConfigPath(): string {
-  return process.env.LOCODE_CONFIG || 'locode.yaml'
+  return process.env.LOCODE_CONFIG || path.join(os.homedir(), '.locode', 'locode.yaml')
 }

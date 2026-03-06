@@ -2,6 +2,31 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import { writeGlobalConfig } from './setup'
+
+describe('writeGlobalConfig', () => {
+  const tmpDir = path.join(os.tmpdir(), 'locode-config-test-' + Date.now())
+
+  beforeEach(() => fs.mkdirSync(tmpDir, { recursive: true }))
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }))
+
+  it('creates locode.yaml with the given model when it does not exist', () => {
+    const yamlPath = path.join(tmpDir, 'locode.yaml')
+    writeGlobalConfig('llama3.2:3b', tmpDir)
+    expect(fs.existsSync(yamlPath)).toBe(true)
+    const content = fs.readFileSync(yamlPath, 'utf8')
+    expect(content).toContain('model: llama3.2:3b')
+  })
+
+  it('updates the model in an existing locode.yaml', () => {
+    const yamlPath = path.join(tmpDir, 'locode.yaml')
+    writeGlobalConfig('qwen2.5-coder:7b', tmpDir)
+    writeGlobalConfig('qwen2.5-coder:14b', tmpDir)
+    const content = fs.readFileSync(yamlPath, 'utf8')
+    expect(content).toContain('model: qwen2.5-coder:14b')
+    expect(content).not.toContain('model: qwen2.5-coder:7b')
+  })
+})
 
 describe('loadEnvFile', () => {
   const tmpDir = path.join(os.tmpdir(), 'locode-test-' + Date.now())
