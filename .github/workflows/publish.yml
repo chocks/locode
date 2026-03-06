@@ -17,10 +17,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '25'
           registry-url: 'https://registry.npmjs.org'
           scope: '@chocks-dev'
 
       - run: npm ci
-
-      - run: npm publish --provenance --access public
+      - run: npm run build --if-present
+      - run: npm test
+      - run: npm publish
