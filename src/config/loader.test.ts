@@ -6,7 +6,7 @@ import os from 'os'
 describe('loadConfig', () => {
   it('loads and validates config from yaml file', () => {
     const config = loadConfig(path.join(__dirname, '../../locode.yaml'))
-    expect(config.local_llm.model).toBe('qwen2.5-coder:7b')
+    expect(config.local_llm.model).toBe('qwen3:8b')
     expect(config.routing.rules).toHaveLength(3)
     expect(config.routing.escalation_threshold).toBe(0.7)
   })

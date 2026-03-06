@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { Orchestrator } from './orchestrator'
 
 const mockConfig = {
-  local_llm: { provider: 'ollama' as const, model: 'qwen2.5-coder:7b', base_url: 'http://localhost:11434' },
+  local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' },
   claude: { model: 'claude-sonnet-4-6', token_threshold: 0.99 },
   routing: {
     rules: [{ pattern: 'grep|find|read', agent: 'local' as const }],
@@ -189,6 +189,36 @@ describe('Orchestrator', () => {
     expect(result.content).toBe('claude back')
     expect(mockClaude.run).toHaveBeenCalledWith('refactor this function', 'work done by local agent')
     expect(orch.isLocalFallback()).toBe(false)
+  })
+
+  it('retryWithLocal calls local agent and returns local result', async () => {
+    const mockLocal = {
+      run: vi.fn().mockResolvedValue({ content: 'local retry result', summary: 'summary', inputTokens: 50, outputTokens: 20 }),
+    }
+    const mockClaude = { run: vi.fn() }
+    const orch = new Orchestrator(mockConfig, mockLocal as unknown as import('../agents/local').LocalAgent, mockClaude as unknown as import('../agents/claude').ClaudeAgent)
+
+    const result = await orch.retryWithLocal('find files', 'previous context')
+    expect(result.agent).toBe('local')
+    expect(result.content).toBe('local retry result')
+    expect(mockLocal.run).toHaveBeenCalledWith('find files', 'previous context')
+    expect(mockClaude.run).not.toHaveBeenCalled()
+  })
+
+  it('retryWithClaude calls Claude and returns claude result', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+    const mockLocal = { run: vi.fn() }
+    const mockClaude = {
+      run: vi.fn().mockResolvedValue({ content: 'claude retry result', summary: 'summary', inputTokens: 500, outputTokens: 100, rateLimitInfo: null }),
+      generateHandoffSummary: vi.fn(),
+    }
+    const orch = new Orchestrator(mockConfig, mockLocal as unknown as import('../agents/local').LocalAgent, mockClaude as unknown as import('../agents/claude').ClaudeAgent)
+
+    const result = await orch.retryWithClaude('complex task', 'previous context')
+    expect(result.agent).toBe('claude')
+    expect(result.content).toBe('claude retry result')
+    expect(mockClaude.run).toHaveBeenCalledWith('complex task', 'previous context')
+    expect(mockLocal.run).not.toHaveBeenCalled()
   })
 
   it('stays local when switch-back attempt is still rate-limited', async () => {

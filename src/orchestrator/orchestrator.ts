@@ -114,6 +114,19 @@ export class Orchestrator {
     return { ...result, agent: decision.agent, routeMethod: decision.method }
   }
 
+  async retryWithLocal(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
+    const result = await this.localAgent.run(prompt, previousSummary)
+    this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
+    return { ...result, agent: 'local', routeMethod: 'rule' }
+  }
+
+  async retryWithClaude(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
+    const result = await this.claudeAgent.run(prompt, previousSummary)
+    this.tracker.record({ agent: 'claude', input: result.inputTokens, output: result.outputTokens, model: this.config.claude.model })
+    await this.checkAndTriggerFallback(result)
+    return { ...result, agent: 'claude', routeMethod: 'rule' }
+  }
+
   getStats() { return this.tracker.getStats() }
   resetStats() { this.tracker.reset() }
 
