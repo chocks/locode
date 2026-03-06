@@ -4,6 +4,10 @@ import { ClaudeAgent, ClaudeAgentResult } from '../agents/claude'
 import { TokenTracker } from '../tracker/tracker'
 import type { Config } from '../config/schema'
 
+function isRateLimitError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { status?: number }).status === 429
+}
+
 export interface OrchestratorResult extends AgentResult {
   agent: AgentType
   routeMethod: 'rule' | 'llm'
@@ -41,16 +45,33 @@ export class Orchestrator {
   isLocalFallback(): boolean { return this.localFallback }
 
   async process(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
-    // Token exhaustion fallback — stay local until reset time
-    if (this.localFallback && Date.now() < this.resetsAt) {
-      const result = await this.localAgent.run(prompt, this.fallbackSummary)
-      this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
-      return { ...result, agent: 'local', routeMethod: 'rule' }
-    }
+    // Token exhaustion fallback
+    if (this.localFallback) {
+      if (Date.now() < this.resetsAt) {
+        // Still before reset — stay local
+        const result = await this.localAgent.run(prompt, this.fallbackSummary)
+        this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
+        return { ...result, agent: 'local', routeMethod: 'rule' }
+      }
 
-    // Past reset — clear fallback, attempt Claude below
-    if (this.localFallback && Date.now() >= this.resetsAt) {
-      this.localFallback = false
+      // Past reset — attempt switch-back to Claude
+      try {
+        const claudeResult = await this.claudeAgent.run(prompt, this.fallbackSummary)
+        this.localFallback = false
+        this.fallbackSummary = ''
+        console.error('[locode] Claude available again, resuming')
+        this.tracker.record({ agent: 'claude', input: claudeResult.inputTokens, output: claudeResult.outputTokens, model: this.config.claude.model })
+        await this.checkAndTriggerFallback(claudeResult)
+        return { ...claudeResult, agent: 'claude', routeMethod: 'rule' }
+      } catch (err) {
+        if (isRateLimitError(err)) {
+          this.resetsAt = Date.now() + 60 * 60 * 1000  // retry in 1 hour
+          const result = await this.localAgent.run(prompt, this.fallbackSummary)
+          this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
+          return { ...result, agent: 'local', routeMethod: 'rule' }
+        }
+        throw err
+      }
     }
 
     if (this.claudeOnly) {

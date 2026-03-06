@@ -152,4 +152,77 @@ describe('Orchestrator', () => {
     expect(mockClaude.generateHandoffSummary).not.toHaveBeenCalled()
     expect(orch.isLocalFallback()).toBe(false)
   })
+
+  it('switches back to Claude after reset time passes', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+
+    const mockLocal = {
+      run: vi.fn().mockResolvedValue({ content: 'local', summary: 'local summary', inputTokens: 50, outputTokens: 20 }),
+    }
+    const mockClaude = {
+      run: vi.fn().mockResolvedValue({
+        content: 'claude back',
+        summary: 'claude summary',
+        inputTokens: 500,
+        outputTokens: 100,
+        rateLimitInfo: { tokensRemaining: 80000, tokensLimit: 100000, resetsAt: Date.now() + 86400000 },
+      }),
+      generateHandoffSummary: vi.fn().mockResolvedValue('handoff summary'),
+    }
+
+    const orch = new Orchestrator(
+      mockConfig,
+      mockLocal as unknown as import('../agents/local').LocalAgent,
+      mockClaude as unknown as import('../agents/claude').ClaudeAgent,
+    )
+
+    // Force into fallback state with an already-expired resetsAt
+    // @ts-expect-error accessing private for test
+    orch.localFallback = true
+    // @ts-expect-error accessing private for test
+    orch.resetsAt = Date.now() - 1000  // already past
+    // @ts-expect-error accessing private for test
+    orch.fallbackSummary = 'work done by local agent'
+
+    const result = await orch.process('refactor this function')
+    expect(result.agent).toBe('claude')
+    expect(result.content).toBe('claude back')
+    expect(mockClaude.run).toHaveBeenCalledWith('refactor this function', 'work done by local agent')
+    expect(orch.isLocalFallback()).toBe(false)
+  })
+
+  it('stays local when switch-back attempt is still rate-limited', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+
+    const rateLimitError = Object.assign(new Error('rate limit'), { status: 429 })
+
+    const mockLocal = {
+      run: vi.fn().mockResolvedValue({ content: 'local', summary: 'local summary', inputTokens: 50, outputTokens: 20 }),
+    }
+    const mockClaude = {
+      run: vi.fn().mockRejectedValue(rateLimitError),
+      generateHandoffSummary: vi.fn(),
+    }
+
+    const orch = new Orchestrator(
+      mockConfig,
+      mockLocal as unknown as import('../agents/local').LocalAgent,
+      mockClaude as unknown as import('../agents/claude').ClaudeAgent,
+    )
+
+    // @ts-expect-error accessing private for test
+    orch.localFallback = true
+    // @ts-expect-error accessing private for test
+    orch.resetsAt = Date.now() - 1000
+    // @ts-expect-error accessing private for test
+    orch.fallbackSummary = 'local context'
+
+    const beforeRetry = Date.now() + 3600000 - 5000  // ~1 hour from now minus 5s buffer
+
+    const result = await orch.process('any prompt')
+    expect(result.agent).toBe('local')
+    expect(orch.isLocalFallback()).toBe(true)
+    // @ts-expect-error accessing private for test
+    expect(orch.resetsAt).toBeGreaterThan(beforeRetry)
+  })
 })
