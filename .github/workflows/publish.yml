@@ -17,12 +17,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-          registry-url: https://registry.npmjs.org
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
 
       - run: npm ci
 
-      - run: npm config delete //registry.npmjs.org/:_authToken
-
-      - run: npm publish --provenance
+      - run: npm publish
