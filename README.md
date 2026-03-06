@@ -135,6 +135,37 @@ npm run build      # outputs to dist/
 npm run build && node dist/index.js
 ```
 
+### Releasing a new version
+
+Releases are tag-driven. CI publishes to npm automatically when a `v*` tag is pushed — it never commits to `main`.
+
+```bash
+# 1. Start from clean main
+git checkout main && git pull
+
+# 2. Create a release branch
+git checkout -b release/v0.1.5
+
+# 3. Bump the version (edits package.json only — no commit or tag yet)
+npm run release:patch   # patch: 0.1.4 → 0.1.5
+# npm run release:minor # minor: 0.1.4 → 0.2.0
+# npm run release:major # major: 0.1.4 → 1.0.0
+
+# 4. Commit and open a PR
+git add package.json package-lock.json
+git commit -S -m "chore: release v0.1.5"
+git push -u origin release/v0.1.5
+gh pr create --fill
+
+# 5. After the PR is merged, tag the new main HEAD
+git checkout main && git pull
+VERSION="v$(node -p "require('./package.json').version")"
+git tag -s "$VERSION" -m "Release $VERSION"
+git push origin "$VERSION"
+```
+
+The tag push triggers the publish workflow which builds, tests, publishes to npm, and creates a GitHub Release with auto-generated notes.
+
 **Project structure:**
 ```
 src/
@@ -183,4 +214,4 @@ Open an issue with:
 
 ## Roadmap
 
-- [ ] GitHub Actions workflow to auto-publish on git tag push
+- [x] GitHub Actions workflow to auto-publish on git tag push
