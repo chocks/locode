@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasUnclosedCodeBlock, looksLikeStruggle, looksLikeSimpleLocalTask } from './repl'
+import { hasUnclosedCodeBlock, looksLikeStruggle, looksLikeSimpleLocalTask, parseConfirmation } from './repl'
 
 describe('hasUnclosedCodeBlock', () => {
   it('returns false for plain text', () => {
@@ -76,5 +76,39 @@ describe('looksLikeStruggle', () => {
 
   it('returns false for "I have access to the tools provided"', () => {
     expect(looksLikeStruggle('I have access to the tools provided.')).toBe(false)
+  })
+})
+
+describe('parseConfirmation', () => {
+  it('returns "proceed" for empty input (default)', () => {
+    expect(parseConfirmation('')).toBe('proceed')
+  })
+
+  it('returns "proceed" for "y"', () => {
+    expect(parseConfirmation('y')).toBe('proceed')
+  })
+
+  it('returns "proceed" for "Y"', () => {
+    expect(parseConfirmation('Y')).toBe('proceed')
+  })
+
+  it('returns "cancel" for "n"', () => {
+    expect(parseConfirmation('n')).toBe('cancel')
+  })
+
+  it('returns "cancel" for "N"', () => {
+    expect(parseConfirmation('N')).toBe('cancel')
+  })
+
+  it('returns "switch" for "s"', () => {
+    expect(parseConfirmation('s')).toBe('switch')
+  })
+
+  it('returns "switch" for "S"', () => {
+    expect(parseConfirmation('S')).toBe('switch')
+  })
+
+  it('returns "proceed" for unrecognized input', () => {
+    expect(parseConfirmation('x')).toBe('proceed')
   })
 })
