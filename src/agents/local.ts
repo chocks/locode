@@ -100,7 +100,10 @@ export class LocalAgent {
     this.mcpManager = mcpManager ?? null
   }
 
-  async run(prompt: string, context?: string): Promise<AgentResult> {
+  async run(prompt: string, context?: string, repoContext?: string): Promise<AgentResult> {
+    const systemPrompt = repoContext
+      ? `Project context:\n${repoContext}\n\n${SYSTEM_PROMPT}`
+      : SYSTEM_PROMPT
     const messages: Array<{ role: string; content: string }> = []
 
     if (context) {
@@ -124,7 +127,7 @@ export class LocalAgent {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const response = await Ollama.chat({
         model: this.config.local_llm.model,
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
+        messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
         tools: allTools as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
       })
 
@@ -155,7 +158,7 @@ export class LocalAgent {
     // Fallback if max rounds exceeded — get final answer without tools
     const final = await Ollama.chat({
       model: this.config.local_llm.model,
-      messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
+      messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
     })
     const content = final.message.content
     return {
