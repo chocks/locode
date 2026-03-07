@@ -60,14 +60,19 @@ describe('Router', () => {
     const mockResolve = vi.fn().mockResolvedValue('local')
     const router = new Router(mockConfig, mockResolve)
     const decision = await router.classify('review AGENT.md')
-    // no static rule matches → LLM resolver is called
+    // Falls through all static rules → LLM resolver is called
     expect(mockResolve).toHaveBeenCalled()
+    expect(decision.method).toBe('llm')
+    // Note: agent is 'claude' due to escalation (confidence 0.6 < threshold 0.7), not a static rule
   })
 
   it('does not statically route "explain <file>" to claude', async () => {
     const mockResolve = vi.fn().mockResolvedValue('local')
     const router = new Router(mockConfig, mockResolve)
     const decision = await router.classify('explain src/index.ts')
+    // Falls through all static rules → LLM resolver is called
     expect(mockResolve).toHaveBeenCalled()
+    expect(decision.method).toBe('llm')
+    // Note: agent is 'claude' due to escalation (confidence 0.6 < threshold 0.7), not a static rule
   })
 })
