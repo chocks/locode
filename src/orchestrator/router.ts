@@ -10,7 +10,12 @@ export interface RouteDecision {
   reason: string
 }
 
-type AmbiguousResolver = (prompt: string) => Promise<AgentType>
+export interface ResolverResult {
+  agent: AgentType
+  confidence: number
+}
+
+type AmbiguousResolver = (prompt: string) => Promise<ResolverResult>
 
 export class Router {
   private config: Config
@@ -32,36 +37,38 @@ export class Router {
     }
 
     // No rule matched — use local LLM to decide
-    const llmAgent = await this.resolveAmbiguous(prompt)
-    const confidence = 0.6
+    const { agent: llmAgent, confidence } = await this.resolveAmbiguous(prompt)
 
     // If confidence is below threshold, escalate to Claude regardless of LLM decision
     const agent = confidence < this.config.routing.escalation_threshold ? 'claude' : llmAgent
     const reason = agent === llmAgent
-      ? `LLM classified as ${agent} task`
+      ? `LLM classified as ${agent} task (confidence: ${confidence})`
       : `LLM confidence too low (${confidence}), escalating to claude`
     return { agent, method: 'llm', confidence, reason }
   }
 
-  private async defaultResolver(prompt: string): Promise<AgentType> {
+  private async defaultResolver(prompt: string): Promise<ResolverResult> {
     try {
       const response = await Ollama.chat({
         model: this.config.local_llm.model,
         messages: [{
           role: 'user',
-          content: `Classify this coding task. Reply with ONLY "local" or "claude".
-- "local": file reading, grep, search, shell commands, git queries, repo exploration
+          content: `Classify this coding task as "local" or "claude".
+- "local": file reading, grep, search, shell commands, git queries, repo exploration, release/tag/version
 - "claude": code generation, refactoring, architecture, writing tests, complex explanations
 
 Task: "${prompt}"
 
-Reply with one word only: local or claude`
+Reply with JSON only: {"agent": "local", "confidence": 0.85}`
         }],
       })
-      const answer = response.message.content.trim().toLowerCase()
-      return answer.startsWith('claude') ? 'claude' : 'local'
+      const answer = response.message.content.trim()
+      const parsed = JSON.parse(answer)
+      const agent: AgentType = parsed.agent === 'claude' ? 'claude' : 'local'
+      const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0.5))
+      return { agent, confidence }
     } catch {
-      return 'local' // fallback on error
+      return { agent: 'local', confidence: 0.5 } // fallback on error
     }
   }
 }
