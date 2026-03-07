@@ -1,10 +1,10 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Orchestrator } from './orchestrator'
 
 vi.mock('fs', () => ({
   default: {},
-  statSync: vi.fn(),
-  readFileSync: vi.fn(),
+  statSync: vi.fn().mockImplementation(() => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }),
+  readFileSync: vi.fn().mockImplementation(() => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }),
 }))
 
 const mockConfig = {
@@ -20,6 +20,10 @@ const mockConfig = {
 }
 
 describe('Orchestrator', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('routes to local agent and records tokens', async () => {
     const mockLocal = { run: vi.fn().mockResolvedValue({ content: 'found files', summary: 'Found 3 files.', inputTokens: 100, outputTokens: 30 }) }
     const mockClaude = { run: vi.fn() }
@@ -280,8 +284,8 @@ describe('Orchestrator', () => {
 
     // Use the hoisted vi.mock('fs') — configure the mocked functions for this test
     const fsMock = await import('fs')
-    vi.mocked(fsMock.statSync).mockReturnValue({ size: 42 } as import('fs').Stats)
-    vi.mocked(fsMock.readFileSync).mockReturnValue('# Hello from AGENT.md')
+    vi.mocked(fsMock.statSync).mockImplementationOnce(() => ({ size: 42 }) as unknown as import('fs').Stats)
+    vi.mocked(fsMock.readFileSync).mockImplementationOnce(() => '# Hello from AGENT.md')
 
     const orch = new Orchestrator(
       orchConfig,
@@ -294,8 +298,5 @@ describe('Orchestrator', () => {
     const calledWith: string = mockLocal.run.mock.calls[0][0]
     expect(calledWith).toContain('[File: AGENT.md]')
     expect(calledWith).toContain('# Hello from AGENT.md')
-
-    vi.mocked(fsMock.statSync).mockReset()
-    vi.mocked(fsMock.readFileSync).mockReset()
   })
 })
