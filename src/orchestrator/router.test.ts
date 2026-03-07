@@ -34,45 +34,55 @@ describe('Router', () => {
   })
 
   it('escalates to Claude for ambiguous tasks when confidence is below threshold', async () => {
-    const mockResolve = vi.fn().mockResolvedValue('local')
+    const mockResolve = vi.fn().mockResolvedValue({ agent: 'local', confidence: 0.6 })
     const router = new Router(mockConfig, mockResolve)
     const decision = await router.classify('help me with this code')
     // confidence 0.6 < threshold 0.7 → escalates to claude
     expect(decision.agent).toBe('claude')
+    expect(decision.confidence).toBe(0.6)
     expect(decision.method).toBe('llm')
     expect(mockResolve).toHaveBeenCalled()
   })
 
-  it('stays local for ambiguous tasks when threshold is low', async () => {
+  it('stays local for ambiguous tasks when confidence exceeds threshold', async () => {
     const lowThresholdConfig = {
       ...mockConfig,
       routing: { ...mockConfig.routing, escalation_threshold: 0.5 },
     }
-    const mockResolve = vi.fn().mockResolvedValue('local')
+    const mockResolve = vi.fn().mockResolvedValue({ agent: 'local', confidence: 0.6 })
     const router = new Router(lowThresholdConfig, mockResolve)
     const decision = await router.classify('help me with this code')
     // confidence 0.6 > threshold 0.5 → stays local
     expect(decision.agent).toBe('local')
+    expect(decision.confidence).toBe(0.6)
     expect(decision.method).toBe('llm')
   })
 
   it('does not statically route "review <file>" to claude', async () => {
-    const mockResolve = vi.fn().mockResolvedValue('local')
+    const mockResolve = vi.fn().mockResolvedValue({ agent: 'local', confidence: 0.8 })
     const router = new Router(mockConfig, mockResolve)
     const decision = await router.classify('review AGENT.md')
     // Falls through all static rules → LLM resolver is called
     expect(mockResolve).toHaveBeenCalled()
     expect(decision.method).toBe('llm')
-    // Note: agent is 'claude' due to escalation (confidence 0.6 < threshold 0.7), not a static rule
+    expect(decision.agent).toBe('local') // 0.8 > 0.7 threshold
   })
 
   it('does not statically route "explain <file>" to claude', async () => {
-    const mockResolve = vi.fn().mockResolvedValue('local')
+    const mockResolve = vi.fn().mockResolvedValue({ agent: 'local', confidence: 0.8 })
     const router = new Router(mockConfig, mockResolve)
     const decision = await router.classify('explain src/index.ts')
     // Falls through all static rules → LLM resolver is called
     expect(mockResolve).toHaveBeenCalled()
     expect(decision.method).toBe('llm')
-    // Note: agent is 'claude' due to escalation (confidence 0.6 < threshold 0.7), not a static rule
+    expect(decision.agent).toBe('local') // 0.8 > 0.7 threshold
+  })
+
+  it('respects LLM decision when confidence exceeds threshold', async () => {
+    const mockResolve = vi.fn().mockResolvedValue({ agent: 'claude', confidence: 0.9 })
+    const router = new Router(mockConfig, mockResolve)
+    const decision = await router.classify('help me with this code')
+    expect(decision.agent).toBe('claude')
+    expect(decision.confidence).toBe(0.9)
   })
 })

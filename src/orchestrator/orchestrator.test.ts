@@ -304,6 +304,32 @@ describe('Orchestrator', () => {
     expect(calledWith).toContain('# Hello from AGENT.md')
   })
 
+  it('route() returns decision without executing agent', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+    const mockLocal = { run: vi.fn() }
+    const mockClaude = { run: vi.fn() }
+    const orch = new Orchestrator(mockConfig, mockLocal as unknown as import('../agents/local').LocalAgent, mockClaude as unknown as import('../agents/claude').ClaudeAgent)
+
+    const decision = await orch.route('find all .ts files')
+    expect(decision.agent).toBe('local')
+    expect(decision.method).toBe('rule')
+    expect(mockLocal.run).not.toHaveBeenCalled()
+    expect(mockClaude.run).not.toHaveBeenCalled()
+  })
+
+  it('execute() runs the specified agent', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+    const mockLocal = { run: vi.fn().mockResolvedValue({ content: 'found files', summary: 'summary', inputTokens: 100, outputTokens: 30 }) }
+    const mockClaude = { run: vi.fn() }
+    const orch = new Orchestrator(mockConfig, mockLocal as unknown as import('../agents/local').LocalAgent, mockClaude as unknown as import('../agents/claude').ClaudeAgent)
+
+    const result = await orch.execute('find all .ts files', 'local')
+    expect(result.agent).toBe('local')
+    expect(result.content).toBe('found files')
+    expect(mockLocal.run).toHaveBeenCalled()
+    expect(mockClaude.run).not.toHaveBeenCalled()
+  })
+
   it('passes repo context to local agent on run', async () => {
     const mockLocal = {
       run: vi.fn().mockResolvedValue({ content: 'ok', summary: 'ok', inputTokens: 10, outputTokens: 5 }),

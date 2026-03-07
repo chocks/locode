@@ -1,5 +1,6 @@
 import * as readline from 'readline'
 import { Orchestrator } from '../orchestrator/orchestrator'
+import type { OrchestratorResult } from '../orchestrator/orchestrator'
 import { printResult, printStats } from './display'
 import type { Config } from '../config/schema'
 
@@ -24,6 +25,15 @@ export function looksLikeStruggle(response: string): boolean {
 
 export function looksLikeSimpleLocalTask(prompt: string): boolean {
   return /\b(find|grep|search|ls|cat|read|explore|show|list|git\s+(log|diff|status|blame))\b/i.test(prompt)
+}
+
+export type ConfirmAction = 'proceed' | 'cancel' | 'switch'
+
+export function parseConfirmation(input: string): ConfirmAction {
+  const trimmed = input.trim().toLowerCase()
+  if (trimmed === 'n') return 'cancel'
+  if (trimmed === 's') return 'switch'
+  return 'proceed'
 }
 
 function askQuestion(rl: readline.Interface, question: string): Promise<string> {
@@ -101,7 +111,35 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
     buffer = []
 
     try {
-      let result = await orch.process(input, lastSummary)
+      let result: OrchestratorResult
+
+      if (orch.isLocalOnly() || orch.isClaudeOnly() || orch.isLocalFallback()) {
+        // Forced modes skip confirmation
+        result = await orch.process(input, lastSummary)
+      } else {
+        const decision = await orch.route(input)
+
+        // Skip confirmation for rule-matched routes (high confidence)
+        if (decision.method === 'rule') {
+          result = await orch.execute(input, decision.agent, lastSummary)
+        } else {
+          const otherAgent = decision.agent === 'claude' ? 'local' : 'claude'
+          console.log(`\n${decision.agent} — ${decision.reason}`)
+          processing = false
+          const answer = await askQuestion(rl, '   Proceed? [Y/n/s(witch)] ')
+          processing = true
+          const action = parseConfirmation(answer)
+
+          if (action === 'cancel') {
+            processing = false
+            showPrompt()
+            return
+          }
+
+          const chosenAgent = action === 'switch' ? otherAgent : decision.agent
+          result = await orch.execute(input, chosenAgent, lastSummary)
+        }
+      }
 
       // Suggest Claude escalation if local agent signals it can't handle the task
       if (result.agent === 'local' && !orch.isLocalOnly() && looksLikeStruggle(result.content)) {
