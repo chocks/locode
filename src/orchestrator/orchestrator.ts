@@ -1,4 +1,4 @@
-import { Router, AgentType } from './router'
+import { Router, AgentType, RouteDecision } from './router'
 import { LocalAgent, AgentResult } from '../agents/local'
 import { ClaudeAgent, ClaudeAgentResult } from '../agents/claude'
 import { TokenTracker } from '../tracker/tracker'
@@ -134,6 +134,42 @@ export class Orchestrator {
     })
 
     return { ...result, agent: decision.agent, routeMethod: decision.method, reason }
+  }
+
+  async route(prompt: string): Promise<RouteDecision> {
+    const enrichedPrompt = injectFileContext(prompt, this.config.context.max_file_bytes)
+    return this.router.classify(enrichedPrompt)
+  }
+
+  async execute(prompt: string, agent: AgentType, previousSummary?: string): Promise<OrchestratorResult> {
+    const enrichedPrompt = injectFileContext(prompt, this.config.context.max_file_bytes)
+
+    let result: AgentResult
+    let actualAgent = agent
+    let reason = `user confirmed ${agent}`
+
+    if (agent === 'claude') {
+      try {
+        const claudeResult = await this.claudeAgent.run(enrichedPrompt, previousSummary, this.repoContext)
+        await this.checkAndTriggerFallback(claudeResult)
+        result = claudeResult
+      } catch (err) {
+        result = await this.localAgent.run(enrichedPrompt, previousSummary, this.repoContext)
+        actualAgent = 'local'
+        reason = `Claude unavailable (${(err as Error).message}), fell back to local`
+      }
+    } else {
+      result = await this.localAgent.run(enrichedPrompt, previousSummary, this.repoContext)
+    }
+
+    this.tracker.record({
+      agent: actualAgent,
+      input: result.inputTokens,
+      output: result.outputTokens,
+      model: actualAgent === 'local' ? this.config.local_llm.model : this.config.claude.model,
+    })
+
+    return { ...result, agent: actualAgent, routeMethod: 'llm', reason }
   }
 
   async retryWithLocal(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
