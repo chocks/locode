@@ -4,6 +4,7 @@ import { ClaudeAgent, ClaudeAgentResult } from '../agents/claude'
 import { TokenTracker } from '../tracker/tracker'
 import type { Config } from '../config/schema'
 import { injectFileContext } from './file-context-injector'
+import { loadRepoContext } from './repo-context-loader'
 import { McpManager } from '../mcp/client'
 
 function isRateLimitError(err: unknown): boolean {
@@ -32,6 +33,7 @@ export class Orchestrator {
   private localFallback: boolean = false
   private fallbackSummary: string = ''
   private resetsAt: number = 0
+  private repoContext: string = ''
   private mcpManager: McpManager | null = null
 
   constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent, options?: OrchestratorOptions) {
@@ -42,6 +44,7 @@ export class Orchestrator {
     this.tracker = new TokenTracker(config.token_tracking)
     this.claudeOnly = options?.claudeOnly ?? false
     this.localOnly = options?.localOnly ?? (!process.env.ANTHROPIC_API_KEY)
+    this.repoContext = loadRepoContext(config.context.repo_context_files, config.context.max_file_bytes)
   }
 
   async initMcp(): Promise<void> {
@@ -65,14 +68,14 @@ export class Orchestrator {
     if (this.localFallback) {
       if (Date.now() < this.resetsAt) {
         // Still before reset — stay local
-        const result = await this.localAgent.run(prompt, this.fallbackSummary)
+        const result = await this.localAgent.run(prompt, this.fallbackSummary, this.repoContext)
         this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
         return { ...result, agent: 'local', routeMethod: 'rule', reason: 'Claude token limit reached, using local until reset' }
       }
 
       // Past reset — attempt switch-back to Claude
       try {
-        const claudeResult = await this.claudeAgent.run(prompt, this.fallbackSummary)
+        const claudeResult = await this.claudeAgent.run(prompt, this.fallbackSummary, this.repoContext)
         this.localFallback = false
         this.fallbackSummary = ''
         this.tracker.record({ agent: 'claude', input: claudeResult.inputTokens, output: claudeResult.outputTokens, model: this.config.claude.model })
@@ -81,7 +84,7 @@ export class Orchestrator {
       } catch (err) {
         if (isRateLimitError(err)) {
           this.resetsAt = Date.now() + 60 * 60 * 1000  // retry in 1 hour
-          const result = await this.localAgent.run(prompt, this.fallbackSummary)
+          const result = await this.localAgent.run(prompt, this.fallbackSummary, this.repoContext)
           this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
           return { ...result, agent: 'local', routeMethod: 'rule', reason: 'Claude still rate-limited, staying on local' }
         }
@@ -93,14 +96,14 @@ export class Orchestrator {
     const enrichedPrompt = injectFileContext(prompt, this.config.context.max_file_bytes)
 
     if (this.claudeOnly) {
-      const result = await this.claudeAgent.run(enrichedPrompt, previousSummary)
+      const result = await this.claudeAgent.run(enrichedPrompt, previousSummary, this.repoContext)
       this.tracker.record({ agent: 'claude', input: result.inputTokens, output: result.outputTokens, model: this.config.claude.model })
       await this.checkAndTriggerFallback(result)
       return { ...result, agent: 'claude', routeMethod: 'rule', reason: '--claude-only mode' }
     }
 
     if (this.localOnly) {
-      const result = await this.localAgent.run(enrichedPrompt, previousSummary)
+      const result = await this.localAgent.run(enrichedPrompt, previousSummary, this.repoContext)
       this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
       return { ...result, agent: 'local', routeMethod: 'rule', reason: '--local-only mode' }
     }
@@ -111,16 +114,16 @@ export class Orchestrator {
     let result: AgentResult
     if (decision.agent === 'claude') {
       try {
-        const claudeResult = await this.claudeAgent.run(enrichedPrompt, previousSummary)
+        const claudeResult = await this.claudeAgent.run(enrichedPrompt, previousSummary, this.repoContext)
         await this.checkAndTriggerFallback(claudeResult)
         result = claudeResult
       } catch (err) {
-        result = await this.localAgent.run(enrichedPrompt, previousSummary)
+        result = await this.localAgent.run(enrichedPrompt, previousSummary, this.repoContext)
         decision.agent = 'local'
         reason = `Claude unavailable (${(err as Error).message}), fell back to local`
       }
     } else {
-      result = await this.localAgent.run(enrichedPrompt, previousSummary)
+      result = await this.localAgent.run(enrichedPrompt, previousSummary, this.repoContext)
     }
 
     this.tracker.record({
@@ -134,13 +137,13 @@ export class Orchestrator {
   }
 
   async retryWithLocal(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
-    const result = await this.localAgent.run(prompt, previousSummary)
+    const result = await this.localAgent.run(prompt, previousSummary, this.repoContext)
     this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
     return { ...result, agent: 'local', routeMethod: 'rule', reason: 'user requested local retry' }
   }
 
   async retryWithClaude(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
-    const result = await this.claudeAgent.run(prompt, previousSummary)
+    const result = await this.claudeAgent.run(prompt, previousSummary, this.repoContext)
     this.tracker.record({ agent: 'claude', input: result.inputTokens, output: result.outputTokens, model: this.config.claude.model })
     await this.checkAndTriggerFallback(result)
     return { ...result, agent: 'claude', routeMethod: 'rule', reason: 'user requested Claude escalation' }

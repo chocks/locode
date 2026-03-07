@@ -7,6 +7,10 @@ vi.mock('fs', () => ({
   readFileSync: vi.fn().mockImplementation(() => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }),
 }))
 
+vi.mock('./repo-context-loader', () => ({
+  loadRepoContext: vi.fn().mockReturnValue('--- CLAUDE.md ---\n# Test Project'),
+}))
+
 const mockConfig = {
   local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' },
   claude: { model: 'claude-sonnet-4-6', token_threshold: 0.99 },
@@ -15,7 +19,7 @@ const mockConfig = {
     ambiguous_resolver: 'local' as const,
     escalation_threshold: 0.7,
   },
-  context: { handoff: 'summary' as const, max_summary_tokens: 500, max_file_bytes: 51200 },
+  context: { handoff: 'summary' as const, max_summary_tokens: 500, max_file_bytes: 51200, repo_context_files: ['CLAUDE.md'] },
   token_tracking: { enabled: false, log_file: '/tmp/test.log' },
 }
 
@@ -129,7 +133,7 @@ describe('Orchestrator', () => {
 
     // Second call: should go to local with handoff summary as context
     await orch.process('refactor this function')
-    expect(mockLocal.run).toHaveBeenCalledWith('refactor this function', 'handoff summary from claude')
+    expect(mockLocal.run).toHaveBeenCalledWith('refactor this function', 'handoff summary from claude', '--- CLAUDE.md ---\n# Test Project')
   })
 
   it('stays on Claude when token threshold is not exceeded', async () => {
@@ -197,7 +201,7 @@ describe('Orchestrator', () => {
     const result = await orch.process('refactor this function')
     expect(result.agent).toBe('claude')
     expect(result.content).toBe('claude back')
-    expect(mockClaude.run).toHaveBeenCalledWith('refactor this function', 'work done by local agent')
+    expect(mockClaude.run).toHaveBeenCalledWith('refactor this function', 'work done by local agent', '--- CLAUDE.md ---\n# Test Project')
     expect(orch.isLocalFallback()).toBe(false)
   })
 
@@ -211,7 +215,7 @@ describe('Orchestrator', () => {
     const result = await orch.retryWithLocal('find files', 'previous context')
     expect(result.agent).toBe('local')
     expect(result.content).toBe('local retry result')
-    expect(mockLocal.run).toHaveBeenCalledWith('find files', 'previous context')
+    expect(mockLocal.run).toHaveBeenCalledWith('find files', 'previous context', '--- CLAUDE.md ---\n# Test Project')
     expect(mockClaude.run).not.toHaveBeenCalled()
   })
 
@@ -227,7 +231,7 @@ describe('Orchestrator', () => {
     const result = await orch.retryWithClaude('complex task', 'previous context')
     expect(result.agent).toBe('claude')
     expect(result.content).toBe('claude retry result')
-    expect(mockClaude.run).toHaveBeenCalledWith('complex task', 'previous context')
+    expect(mockClaude.run).toHaveBeenCalledWith('complex task', 'previous context', '--- CLAUDE.md ---\n# Test Project')
     expect(mockLocal.run).not.toHaveBeenCalled()
   })
 
@@ -298,5 +302,20 @@ describe('Orchestrator', () => {
     const calledWith: string = mockLocal.run.mock.calls[0][0]
     expect(calledWith).toContain('[File: AGENT.md]')
     expect(calledWith).toContain('# Hello from AGENT.md')
+  })
+
+  it('passes repo context to local agent on run', async () => {
+    const mockLocal = {
+      run: vi.fn().mockResolvedValue({ content: 'ok', summary: 'ok', inputTokens: 10, outputTokens: 5 }),
+    }
+    const mockClaude = { run: vi.fn() }
+    const orch = new Orchestrator(mockConfig, mockLocal as unknown as import('../agents/local').LocalAgent, mockClaude as unknown as import('../agents/claude').ClaudeAgent)
+
+    await orch.process('find files')
+    expect(mockLocal.run).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      '--- CLAUDE.md ---\n# Test Project',
+    )
   })
 })
