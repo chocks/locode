@@ -27,4 +27,70 @@ describe('ConfigSchema', () => {
   it('rejects token_threshold below 0', () => {
     expect(() => ConfigSchema.parse({ ...baseConfig, claude: { model: 'claude-sonnet-4-6', token_threshold: -0.01 } })).toThrow()
   })
+
+  it('defaults mcp_servers to empty object when omitted', () => {
+    const result = ConfigSchema.parse(baseConfig)
+    expect(result.mcp_servers).toEqual({})
+  })
+
+  it('accepts stdio mcp_server with command, args, and env', () => {
+    const result = ConfigSchema.parse({
+      ...baseConfig,
+      mcp_servers: {
+        github: {
+          type: 'stdio',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github'],
+          env: { GITHUB_TOKEN: 'test-token' },
+        },
+      },
+    })
+    const server = result.mcp_servers.github
+    expect(server.type).toBe('stdio')
+    if (server.type === 'stdio') {
+      expect(server.command).toBe('npx')
+      expect(server.args).toEqual(['-y', '@modelcontextprotocol/server-github'])
+      expect(server.env.GITHUB_TOKEN).toBe('test-token')
+    }
+  })
+
+  it('defaults stdio mcp_server args and env when omitted', () => {
+    const result = ConfigSchema.parse({
+      ...baseConfig,
+      mcp_servers: { test: { type: 'stdio', command: 'my-server' } },
+    })
+    const server = result.mcp_servers.test
+    if (server.type === 'stdio') {
+      expect(server.args).toEqual([])
+      expect(server.env).toEqual({})
+    }
+  })
+
+  it('accepts remote mcp_server with url', () => {
+    const result = ConfigSchema.parse({
+      ...baseConfig,
+      mcp_servers: {
+        linear: { type: 'remote', url: 'https://mcp.linear.app/sse' },
+      },
+    })
+    const server = result.mcp_servers.linear
+    expect(server.type).toBe('remote')
+    if (server.type === 'remote') {
+      expect(server.url).toBe('https://mcp.linear.app/sse')
+    }
+  })
+
+  it('rejects mcp_server without type', () => {
+    expect(() => ConfigSchema.parse({
+      ...baseConfig,
+      mcp_servers: { test: { command: 'foo' } },
+    })).toThrow()
+  })
+
+  it('rejects remote mcp_server with invalid url', () => {
+    expect(() => ConfigSchema.parse({
+      ...baseConfig,
+      mcp_servers: { test: { type: 'remote', url: 'not-a-url' } },
+    })).toThrow()
+  })
 })

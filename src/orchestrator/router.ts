@@ -7,6 +7,7 @@ export interface RouteDecision {
   agent: AgentType
   method: 'rule' | 'llm'
   confidence: number
+  reason: string
 }
 
 type AmbiguousResolver = (prompt: string) => Promise<AgentType>
@@ -26,7 +27,7 @@ export class Router {
     for (const rule of this.config.routing.rules) {
       const regex = new RegExp(rule.pattern, 'i')
       if (regex.test(lower)) {
-        return { agent: rule.agent, method: 'rule', confidence: 1.0 }
+        return { agent: rule.agent, method: 'rule', confidence: 1.0, reason: `matched pattern: ${rule.pattern}` }
       }
     }
 
@@ -36,7 +37,10 @@ export class Router {
 
     // If confidence is below threshold, escalate to Claude regardless of LLM decision
     const agent = confidence < this.config.routing.escalation_threshold ? 'claude' : llmAgent
-    return { agent, method: 'llm', confidence }
+    const reason = agent === llmAgent
+      ? `LLM classified as ${agent} task`
+      : `LLM confidence too low (${confidence}), escalating to claude`
+    return { agent, method: 'llm', confidence, reason }
   }
 
   private async defaultResolver(prompt: string): Promise<AgentType> {

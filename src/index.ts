@@ -39,10 +39,12 @@ program
   .action(async (prompt, opts) => {
     const config = loadConfig(path.resolve(opts.config))
     const orch = new Orchestrator(config, undefined, undefined, { claudeOnly: opts.claudeOnly, localOnly: opts.localOnly })
+    await orch.initMcp()
     if (orch.isLocalOnly()) console.error('[local-only mode] Using local LLM')
     if (orch.isClaudeOnly()) console.error('[claude-only mode] Using Claude')
     const result = await orch.process(prompt)
     console.log(result.content)
+    await orch.shutdown()
     process.exit(0)
   })
 

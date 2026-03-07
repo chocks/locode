@@ -32,6 +32,7 @@ function askQuestion(rl: readline.Interface, question: string): Promise<string> 
 
 export async function startRepl(config: Config, options?: { claudeOnly?: boolean; localOnly?: boolean }): Promise<void> {
   const orch = new Orchestrator(config, undefined, undefined, options)
+  await orch.initMcp()
   if (orch.isLocalOnly()) {
     console.log('[local-only mode] All tasks routed to local LLM\n')
   }
@@ -69,6 +70,7 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
       const trimmed = line.trim()
       if (trimmed === 'exit' || trimmed === 'quit') {
         printStats(orch.getStats())
+        await orch.shutdown()
         rl.close()
         return
       }
@@ -121,7 +123,7 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
         }
       }
 
-      printResult(result.content, result.agent, result.routeMethod)
+      printResult(result.content, result.agent, result.routeMethod, result.reason)
       lastSummary = result.summary
     } catch (err) {
       console.error(`Error: ${(err as Error).message}`)

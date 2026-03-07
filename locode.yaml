@@ -26,3 +26,8 @@ context:
 token_tracking:
   enabled: true
   log_file: ~/.locode/usage.log
+
+# mcp_servers:
+#   linear:
+#     type: remote
+#     url: https://mcp.linear.app/sse
