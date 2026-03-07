@@ -29,7 +29,7 @@ export class ClaudeAgent {
     this.client = new Anthropic()
   }
 
-  async run(prompt: string, context?: string): Promise<ClaudeAgentResult> {
+  async run(prompt: string, context?: string, repoContext?: string): Promise<ClaudeAgentResult> {
     const messages: Anthropic.MessageParam[] = []
 
     if (context) {
@@ -44,6 +44,7 @@ export class ClaudeAgent {
     const { data: response, response: httpResponse } = await this.client.messages.create({
       model: this.config.claude.model,
       max_tokens: 8096,
+      ...(repoContext ? { system: `Project context:\n${repoContext}` } : {}),
       messages,
     }).withResponse()
 

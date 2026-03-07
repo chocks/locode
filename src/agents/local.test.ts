@@ -75,4 +75,15 @@ describe('LocalAgent', () => {
     expect(result.content).toContain('hello')
     expect(mockChat).toHaveBeenCalledTimes(2)
   })
+
+  it('includes repo context in system prompt when provided', async () => {
+    const agent = new LocalAgent(config)
+    await agent.run('hello', undefined, '--- CLAUDE.md ---\n# My Project')
+
+    const chatCall = vi.mocked(Ollama.chat).mock.calls[0][0]
+    const systemMsg = chatCall.messages[0]
+    expect(systemMsg.role).toBe('system')
+    expect((systemMsg as { content: string }).content).toContain('# My Project')
+    expect((systemMsg as { content: string }).content).toContain('You are a local coding assistant')
+  })
 })

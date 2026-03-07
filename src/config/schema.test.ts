@@ -93,4 +93,17 @@ describe('ConfigSchema', () => {
       mcp_servers: { test: { type: 'remote', url: 'not-a-url' } },
     })).toThrow()
   })
+
+  it('accepts repo_context_files as array of strings', () => {
+    const result = ConfigSchema.parse({
+      ...baseConfig,
+      context: { ...baseConfig.context, repo_context_files: ['README.md', 'CONTRIBUTING.md'] },
+    })
+    expect(result.context.repo_context_files).toEqual(['README.md', 'CONTRIBUTING.md'])
+  })
+
+  it('defaults repo_context_files to ["CLAUDE.md"] when not provided', () => {
+    const result = ConfigSchema.parse(baseConfig)
+    expect(result.context.repo_context_files).toEqual(['CLAUDE.md'])
+  })
 })

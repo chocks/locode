@@ -38,6 +38,7 @@ export const ConfigSchema = z.object({
     handoff: z.literal('summary'),
     max_summary_tokens: z.number(),
     max_file_bytes: z.number().int().positive().default(51200),
+    repo_context_files: z.array(z.string()).default(['CLAUDE.md']),
   }),
   token_tracking: z.object({
     enabled: z.boolean(),
