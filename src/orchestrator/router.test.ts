@@ -9,12 +9,12 @@ const mockConfig: Config = {
     rules: [
       { pattern: 'find|grep|search|ls|cat|read|explore|where is', agent: 'local' },
       { pattern: 'git log|git diff|git status|git blame', agent: 'local' },
-      { pattern: 'refactor|architect|design|explain|review|generate|write tests', agent: 'claude' },
+      { pattern: 'refactor|architect|design|generate|write tests', agent: 'claude' },
     ],
     ambiguous_resolver: 'local',
     escalation_threshold: 0.7,
   },
-  context: { handoff: 'summary', max_summary_tokens: 500 },
+  context: { handoff: 'summary', max_summary_tokens: 500, max_file_bytes: 51200 },
   token_tracking: { enabled: true, log_file: '/tmp/test.log' },
 }
 
@@ -54,5 +54,25 @@ describe('Router', () => {
     // confidence 0.6 > threshold 0.5 → stays local
     expect(decision.agent).toBe('local')
     expect(decision.method).toBe('llm')
+  })
+
+  it('does not statically route "review <file>" to claude', async () => {
+    const mockResolve = vi.fn().mockResolvedValue('local')
+    const router = new Router(mockConfig, mockResolve)
+    const decision = await router.classify('review AGENT.md')
+    // Falls through all static rules → LLM resolver is called
+    expect(mockResolve).toHaveBeenCalled()
+    expect(decision.method).toBe('llm')
+    // Note: agent is 'claude' due to escalation (confidence 0.6 < threshold 0.7), not a static rule
+  })
+
+  it('does not statically route "explain <file>" to claude', async () => {
+    const mockResolve = vi.fn().mockResolvedValue('local')
+    const router = new Router(mockConfig, mockResolve)
+    const decision = await router.classify('explain src/index.ts')
+    // Falls through all static rules → LLM resolver is called
+    expect(mockResolve).toHaveBeenCalled()
+    expect(decision.method).toBe('llm')
+    // Note: agent is 'claude' due to escalation (confidence 0.6 < threshold 0.7), not a static rule
   })
 })

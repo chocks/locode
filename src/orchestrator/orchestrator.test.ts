@@ -1,5 +1,11 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Orchestrator } from './orchestrator'
+
+vi.mock('fs', () => ({
+  default: {},
+  statSync: vi.fn().mockImplementation(() => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }),
+  readFileSync: vi.fn().mockImplementation(() => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }),
+}))
 
 const mockConfig = {
   local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' },
@@ -9,11 +15,15 @@ const mockConfig = {
     ambiguous_resolver: 'local' as const,
     escalation_threshold: 0.7,
   },
-  context: { handoff: 'summary' as const, max_summary_tokens: 500 },
+  context: { handoff: 'summary' as const, max_summary_tokens: 500, max_file_bytes: 51200 },
   token_tracking: { enabled: false, log_file: '/tmp/test.log' },
 }
 
 describe('Orchestrator', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('routes to local agent and records tokens', async () => {
     const mockLocal = { run: vi.fn().mockResolvedValue({ content: 'found files', summary: 'Found 3 files.', inputTokens: 100, outputTokens: 30 }) }
     const mockClaude = { run: vi.fn() }
@@ -254,5 +264,39 @@ describe('Orchestrator', () => {
     expect(orch.isLocalFallback()).toBe(true)
     // @ts-expect-error accessing private for test
     expect(orch.resetsAt).toBeGreaterThan(beforeRetry)
+  })
+
+  it('injects file content into prompt before routing and agent dispatch', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+
+    const mockLocal = {
+      run: vi.fn().mockResolvedValue({ content: 'ok', summary: 'ok', inputTokens: 10, outputTokens: 5 }),
+    }
+    const mockClaude = { run: vi.fn() }
+
+    const orchConfig = {
+      ...mockConfig,
+      routing: {
+        ...mockConfig.routing,
+        rules: [{ pattern: 'review', agent: 'local' as const }],
+      },
+    }
+
+    // Use the hoisted vi.mock('fs') — configure the mocked functions for this test
+    const fsMock = await import('fs')
+    vi.mocked(fsMock.statSync).mockImplementationOnce(() => ({ size: 42 }) as unknown as import('fs').Stats)
+    vi.mocked(fsMock.readFileSync).mockImplementationOnce(() => '# Hello from AGENT.md')
+
+    const orch = new Orchestrator(
+      orchConfig,
+      mockLocal as unknown as import('../agents/local').LocalAgent,
+      mockClaude as unknown as import('../agents/claude').ClaudeAgent,
+    )
+
+    await orch.process('review AGENT.md')
+
+    const calledWith: string = mockLocal.run.mock.calls[0][0]
+    expect(calledWith).toContain('[File: AGENT.md]')
+    expect(calledWith).toContain('# Hello from AGENT.md')
   })
 })
