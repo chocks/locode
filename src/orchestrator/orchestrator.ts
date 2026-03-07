@@ -3,6 +3,7 @@ import { LocalAgent, AgentResult } from '../agents/local'
 import { ClaudeAgent, ClaudeAgentResult } from '../agents/claude'
 import { TokenTracker } from '../tracker/tracker'
 import type { Config } from '../config/schema'
+import { injectFileContext } from './file-context-injector'
 
 function isRateLimitError(err: unknown): boolean {
   return err instanceof Error && 'status' in err && (err as { status: number }).status === 429
@@ -74,34 +75,37 @@ export class Orchestrator {
       }
     }
 
+    // Enrich prompt with any referenced file contents before routing/dispatch
+    const enrichedPrompt = injectFileContext(prompt, this.config.context.max_file_bytes)
+
     if (this.claudeOnly) {
-      const result = await this.claudeAgent.run(prompt, previousSummary)
+      const result = await this.claudeAgent.run(enrichedPrompt, previousSummary)
       this.tracker.record({ agent: 'claude', input: result.inputTokens, output: result.outputTokens, model: this.config.claude.model })
       await this.checkAndTriggerFallback(result)
       return { ...result, agent: 'claude', routeMethod: 'rule' }
     }
 
     if (this.localOnly) {
-      const result = await this.localAgent.run(prompt, previousSummary)
+      const result = await this.localAgent.run(enrichedPrompt, previousSummary)
       this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
       return { ...result, agent: 'local', routeMethod: 'rule' }
     }
 
-    const decision = await this.router.classify(prompt)
+    const decision = await this.router.classify(enrichedPrompt)
 
     let result: AgentResult
     if (decision.agent === 'claude') {
       try {
-        const claudeResult = await this.claudeAgent.run(prompt, previousSummary)
+        const claudeResult = await this.claudeAgent.run(enrichedPrompt, previousSummary)
         await this.checkAndTriggerFallback(claudeResult)
         result = claudeResult
       } catch (err) {
         console.error(`[fallback] Claude unavailable (${(err as Error).message}), using local agent`)
-        result = await this.localAgent.run(prompt, previousSummary)
+        result = await this.localAgent.run(enrichedPrompt, previousSummary)
         decision.agent = 'local'
       }
     } else {
-      result = await this.localAgent.run(prompt, previousSummary)
+      result = await this.localAgent.run(enrichedPrompt, previousSummary)
     }
 
     this.tracker.record({

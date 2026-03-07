@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Orchestrator } from './orchestrator'
 
+vi.mock('fs', () => ({
+  default: {},
+  statSync: vi.fn(),
+  readFileSync: vi.fn(),
+}))
+
 const mockConfig = {
   local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' },
   claude: { model: 'claude-sonnet-4-6', token_threshold: 0.99 },
@@ -254,5 +260,42 @@ describe('Orchestrator', () => {
     expect(orch.isLocalFallback()).toBe(true)
     // @ts-expect-error accessing private for test
     expect(orch.resetsAt).toBeGreaterThan(beforeRetry)
+  })
+
+  it('injects file content into prompt before routing and agent dispatch', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+
+    const mockLocal = {
+      run: vi.fn().mockResolvedValue({ content: 'ok', summary: 'ok', inputTokens: 10, outputTokens: 5 }),
+    }
+    const mockClaude = { run: vi.fn() }
+
+    const orchConfig = {
+      ...mockConfig,
+      routing: {
+        ...mockConfig.routing,
+        rules: [{ pattern: 'review', agent: 'local' as const }],
+      },
+    }
+
+    // Use the hoisted vi.mock('fs') — configure the mocked functions for this test
+    const fsMock = await import('fs')
+    vi.mocked(fsMock.statSync).mockReturnValue({ size: 42 } as import('fs').Stats)
+    vi.mocked(fsMock.readFileSync).mockReturnValue('# Hello from AGENT.md')
+
+    const orch = new Orchestrator(
+      orchConfig,
+      mockLocal as unknown as import('../agents/local').LocalAgent,
+      mockClaude as unknown as import('../agents/claude').ClaudeAgent,
+    )
+
+    await orch.process('review AGENT.md')
+
+    const calledWith: string = mockLocal.run.mock.calls[0][0]
+    expect(calledWith).toContain('[File: AGENT.md]')
+    expect(calledWith).toContain('# Hello from AGENT.md')
+
+    vi.mocked(fsMock.statSync).mockReset()
+    vi.mocked(fsMock.readFileSync).mockReset()
   })
 })
