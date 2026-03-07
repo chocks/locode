@@ -14,7 +14,7 @@ const mockConfig: Config = {
     ambiguous_resolver: 'local',
     escalation_threshold: 0.7,
   },
-  context: { handoff: 'summary', max_summary_tokens: 500 },
+  context: { handoff: 'summary', max_summary_tokens: 500, max_file_bytes: 51200 },
   token_tracking: { enabled: true, log_file: '/tmp/test.log' },
 }
 

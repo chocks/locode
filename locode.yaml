@@ -21,6 +21,7 @@ routing:
 context:
   handoff: summary
   max_summary_tokens: 500
+  max_file_bytes: 51200
 
 token_tracking:
   enabled: true

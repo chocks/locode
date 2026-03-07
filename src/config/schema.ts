@@ -23,6 +23,7 @@ export const ConfigSchema = z.object({
   context: z.object({
     handoff: z.literal('summary'),
     max_summary_tokens: z.number(),
+    max_file_bytes: z.number().int().positive().default(51200),
   }),
   token_tracking: z.object({
     enabled: z.boolean(),
