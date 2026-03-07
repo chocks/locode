@@ -40,9 +40,10 @@ describe('injectFileContext', () => {
     vi.mocked(fs.readFileSync).mockReturnValue(bigContent)
     const result = injectFileContext('review big.md', MAX_BYTES)
     expect(result).toContain('[big.md — truncated at 50KB, 60000 bytes total]')
-    // injected content should be capped
-    const injected = result.split('---')[0]
-    expect(injected.length).toBeLessThan(bigContent.length)
+    // Verify the full 60000-char content is not present (truncation actually happened)
+    expect(result).not.toContain(bigContent)
+    // Verify the first MAX_BYTES chars are present (content not silently dropped)
+    expect(result).toContain('x'.repeat(MAX_BYTES))
   })
 
   it('skips file silently when it does not exist', () => {
