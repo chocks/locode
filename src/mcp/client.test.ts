@@ -115,10 +115,7 @@ describe('McpManager', () => {
       linear: { type: 'remote', url: 'https://mcp.linear.app/sse' },
     })
 
-    // First connect throws Unauthorized, second succeeds
-    const mock = getMockClient()
-    // Need to set up mock before connectAll — but instances aren't created yet.
-    // Instead, set up on prototype level:
+    // Set up on prototype level since instance isn't created yet
     const proto = (Client as unknown as ReturnType<typeof vi.fn>).prototype
     proto.connect
       .mockRejectedValueOnce(new UnauthorizedError())
