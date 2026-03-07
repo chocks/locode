@@ -13,7 +13,7 @@ routing:
       agent: local
     - pattern: "git log|git diff|git status|git blame"
       agent: local
-    - pattern: "refactor|architect|design|explain|review|generate|write tests"
+    - pattern: "refactor|architect|design|generate|write tests"
       agent: claude
   ambiguous_resolver: local
   escalation_threshold: 0.7
