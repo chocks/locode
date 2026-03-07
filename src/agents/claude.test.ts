@@ -34,6 +34,7 @@ describe('ClaudeAgent', () => {
   const config = { claude: { model: 'test-model', token_threshold: 0.99 } }
 
   beforeEach(() => {
+    mockCreate.mockReset()
     mockCreate.mockReturnValue(makeCreateResponse('Here is the refactored code.', 1500, 300))
   })
 
@@ -79,6 +80,22 @@ describe('ClaudeAgent', () => {
     const now = Date.now()
     expect(result.rateLimitInfo!.resetsAt).toBeGreaterThan(now)
     expect(result.rateLimitInfo!.resetsAt).toBeLessThanOrEqual(now + 24 * 60 * 60 * 1000)
+  })
+
+  it('passes repo context as system parameter when provided', async () => {
+    const agent = new ClaudeAgent(config)
+    await agent.run('hello', undefined, '--- CLAUDE.md ---\n# My Project')
+
+    const createCall = mockCreate.mock.calls[0][0]
+    expect(createCall.system).toContain('# My Project')
+  })
+
+  it('omits system parameter when no repo context provided', async () => {
+    const agent = new ClaudeAgent(config)
+    await agent.run('hello')
+
+    const createCall = mockCreate.mock.calls[0][0]
+    expect(createCall.system).toBeUndefined()
   })
 
   it('generateHandoffSummary falls back to truncated context on error', async () => {
