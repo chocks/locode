@@ -3,7 +3,7 @@ import * as fs from 'fs'
 // Matches file paths: optional leading ./ or /, then path segments, then extension.
 // Negative lookbehind excludes URLs (paths preceded by :// chars), email addresses,
 // and hostname segments (paths preceded by a dot, e.g. example.com/path).
-const FILE_PATH_REGEX = /(?<![:/\w@.])(?:\.{1,2}\/|\/)?(?:[\w\-]+\/)*[\w\-]+\.\w+/g
+const FILE_PATH_REGEX = /(?<![:/\w@.])(?:\.{1,2}\/|\/)?(?:[\w-]+\/)*[\w-]+\.\w+/g
 
 export function injectFileContext(prompt: string, maxFileBytes: number): string {
   const matches = [...new Set(prompt.match(FILE_PATH_REGEX) ?? [])]
