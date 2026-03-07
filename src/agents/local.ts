@@ -1,5 +1,6 @@
 import Ollama from 'ollama'
 import { readFileTool, shellTool, gitTool } from '../tools'
+import type { McpManager, McpTool } from '../mcp/client'
 
 interface LocalConfig {
   local_llm: { provider: 'ollama'; model: string; base_url: string }
@@ -78,11 +79,25 @@ async function dispatchTool(name: string, args: Record<string, string>): Promise
   }
 }
 
+function mcpToolsToOllama(mcpTools: McpTool[]) {
+  return mcpTools.map(t => ({
+    type: 'function' as const,
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.inputSchema,
+    },
+  }))
+}
+
 export class LocalAgent {
   private config: LocalConfig
+  private mcpManager: McpManager | null
+  private mcpToolNames: Set<string> = new Set()
 
-  constructor(config: LocalConfig) {
+  constructor(config: LocalConfig, mcpManager?: McpManager) {
     this.config = config
+    this.mcpManager = mcpManager ?? null
   }
 
   async run(prompt: string, context?: string): Promise<AgentResult> {
@@ -98,11 +113,19 @@ export class LocalAgent {
     let totalOutputTokens = 0
     const MAX_TOOL_ROUNDS = 5  // prevent infinite loops
 
+    // Merge built-in tools with MCP tools
+    const allTools = [...TOOLS] as Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }>
+    if (this.mcpManager) {
+      const mcpTools = this.mcpManager.getTools()
+      allTools.push(...mcpToolsToOllama(mcpTools))
+      this.mcpToolNames = new Set(mcpTools.map(t => t.name))
+    }
+
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const response = await Ollama.chat({
         model: this.config.local_llm.model,
         messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
-        tools: TOOLS as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
+        tools: allTools as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
       })
 
       totalInputTokens += response.prompt_eval_count ?? 0
@@ -120,7 +143,11 @@ export class LocalAgent {
       // Execute tool calls and append results
       messages.push({ role: 'assistant', content: response.message.content ?? '' })
       for (const tc of toolCalls) {
-        const result = await dispatchTool(tc.function.name, tc.function.arguments as Record<string, string>)
+        const name = tc.function.name
+        const args = tc.function.arguments as Record<string, string>
+        const result = (this.mcpManager && this.mcpToolNames.has(name))
+          ? await this.mcpManager.callTool(name, args)
+          : await dispatchTool(name, args)
         messages.push({ role: 'tool', content: result })
       }
     }

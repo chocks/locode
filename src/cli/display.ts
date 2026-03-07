@@ -9,10 +9,9 @@ export function printStats(stats: TrackerStats): void {
   console.log('---------------------\n')
 }
 
-export function printResult(content: string, agent: string, method: string): void {
-  const label = agent === 'local' ? '[local]' : '[claude]'
-  const dim = agent === 'local' ? '\x1b[2m' : ''
-  const reset = '\x1b[0m'
-  console.log(`\n${dim}${label} (${method})${reset}`)
+export function printResult(content: string, agent: string, method: string, reason?: string): void {
+  const label = agent === 'local' ? '\x1b[36m⚡ local\x1b[0m' : '\x1b[35m🧠 claude\x1b[0m'
+  const reasonText = reason ? ` \x1b[2m— ${reason}\x1b[0m` : ''
+  console.log(`\n${label}${reasonText}`)
   console.log(content)
 }

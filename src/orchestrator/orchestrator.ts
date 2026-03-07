@@ -4,6 +4,7 @@ import { ClaudeAgent, ClaudeAgentResult } from '../agents/claude'
 import { TokenTracker } from '../tracker/tracker'
 import type { Config } from '../config/schema'
 import { injectFileContext } from './file-context-injector'
+import { McpManager } from '../mcp/client'
 
 function isRateLimitError(err: unknown): boolean {
   return err instanceof Error && 'status' in err && (err as { status: number }).status === 429
@@ -12,6 +13,7 @@ function isRateLimitError(err: unknown): boolean {
 export interface OrchestratorResult extends AgentResult {
   agent: AgentType
   routeMethod: 'rule' | 'llm'
+  reason: string
 }
 
 interface OrchestratorOptions {
@@ -30,6 +32,7 @@ export class Orchestrator {
   private localFallback: boolean = false
   private fallbackSummary: string = ''
   private resetsAt: number = 0
+  private mcpManager: McpManager | null = null
 
   constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent, options?: OrchestratorOptions) {
     this.config = config
@@ -39,6 +42,18 @@ export class Orchestrator {
     this.tracker = new TokenTracker(config.token_tracking)
     this.claudeOnly = options?.claudeOnly ?? false
     this.localOnly = options?.localOnly ?? (!process.env.ANTHROPIC_API_KEY)
+  }
+
+  async initMcp(): Promise<void> {
+    if (Object.keys(this.config.mcp_servers).length === 0) return
+    this.mcpManager = new McpManager()
+    await this.mcpManager.connectAll(this.config)
+    // Rebuild local agent with MCP tools
+    this.localAgent = new LocalAgent(this.config, this.mcpManager)
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.mcpManager) await this.mcpManager.disconnectAll()
   }
 
   isLocalOnly(): boolean { return this.localOnly }
@@ -52,7 +67,7 @@ export class Orchestrator {
         // Still before reset — stay local
         const result = await this.localAgent.run(prompt, this.fallbackSummary)
         this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
-        return { ...result, agent: 'local', routeMethod: 'rule' }
+        return { ...result, agent: 'local', routeMethod: 'rule', reason: 'Claude token limit reached, using local until reset' }
       }
 
       // Past reset — attempt switch-back to Claude
@@ -60,16 +75,15 @@ export class Orchestrator {
         const claudeResult = await this.claudeAgent.run(prompt, this.fallbackSummary)
         this.localFallback = false
         this.fallbackSummary = ''
-        console.error('[locode] Claude available again, resuming')
         this.tracker.record({ agent: 'claude', input: claudeResult.inputTokens, output: claudeResult.outputTokens, model: this.config.claude.model })
         await this.checkAndTriggerFallback(claudeResult)
-        return { ...claudeResult, agent: 'claude', routeMethod: 'rule' }
+        return { ...claudeResult, agent: 'claude', routeMethod: 'rule', reason: 'Claude available again after token reset' }
       } catch (err) {
         if (isRateLimitError(err)) {
           this.resetsAt = Date.now() + 60 * 60 * 1000  // retry in 1 hour
           const result = await this.localAgent.run(prompt, this.fallbackSummary)
           this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
-          return { ...result, agent: 'local', routeMethod: 'rule' }
+          return { ...result, agent: 'local', routeMethod: 'rule', reason: 'Claude still rate-limited, staying on local' }
         }
         throw err
       }
@@ -82,16 +96,17 @@ export class Orchestrator {
       const result = await this.claudeAgent.run(enrichedPrompt, previousSummary)
       this.tracker.record({ agent: 'claude', input: result.inputTokens, output: result.outputTokens, model: this.config.claude.model })
       await this.checkAndTriggerFallback(result)
-      return { ...result, agent: 'claude', routeMethod: 'rule' }
+      return { ...result, agent: 'claude', routeMethod: 'rule', reason: '--claude-only mode' }
     }
 
     if (this.localOnly) {
       const result = await this.localAgent.run(enrichedPrompt, previousSummary)
       this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
-      return { ...result, agent: 'local', routeMethod: 'rule' }
+      return { ...result, agent: 'local', routeMethod: 'rule', reason: '--local-only mode' }
     }
 
     const decision = await this.router.classify(enrichedPrompt)
+    let reason = decision.reason
 
     let result: AgentResult
     if (decision.agent === 'claude') {
@@ -100,9 +115,9 @@ export class Orchestrator {
         await this.checkAndTriggerFallback(claudeResult)
         result = claudeResult
       } catch (err) {
-        console.error(`[fallback] Claude unavailable (${(err as Error).message}), using local agent`)
         result = await this.localAgent.run(enrichedPrompt, previousSummary)
         decision.agent = 'local'
+        reason = `Claude unavailable (${(err as Error).message}), fell back to local`
       }
     } else {
       result = await this.localAgent.run(enrichedPrompt, previousSummary)
@@ -115,20 +130,20 @@ export class Orchestrator {
       model: decision.agent === 'local' ? this.config.local_llm.model : this.config.claude.model,
     })
 
-    return { ...result, agent: decision.agent, routeMethod: decision.method }
+    return { ...result, agent: decision.agent, routeMethod: decision.method, reason }
   }
 
   async retryWithLocal(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
     const result = await this.localAgent.run(prompt, previousSummary)
     this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
-    return { ...result, agent: 'local', routeMethod: 'rule' }
+    return { ...result, agent: 'local', routeMethod: 'rule', reason: 'user requested local retry' }
   }
 
   async retryWithClaude(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
     const result = await this.claudeAgent.run(prompt, previousSummary)
     this.tracker.record({ agent: 'claude', input: result.inputTokens, output: result.outputTokens, model: this.config.claude.model })
     await this.checkAndTriggerFallback(result)
-    return { ...result, agent: 'claude', routeMethod: 'rule' }
+    return { ...result, agent: 'claude', routeMethod: 'rule', reason: 'user requested Claude escalation' }
   }
 
   getStats() { return this.tracker.getStats() }

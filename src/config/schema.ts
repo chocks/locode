@@ -5,6 +5,20 @@ export const RoutingRuleSchema = z.object({
   agent: z.enum(['local', 'claude']),
 })
 
+export const McpStdioServerSchema = z.object({
+  type: z.literal('stdio'),
+  command: z.string(),
+  args: z.array(z.string()).default([]),
+  env: z.record(z.string(), z.string()).default({}),
+})
+
+export const McpRemoteServerSchema = z.object({
+  type: z.literal('remote'),
+  url: z.string().url(),
+})
+
+export const McpServerSchema = z.discriminatedUnion('type', [McpStdioServerSchema, McpRemoteServerSchema])
+
 export const ConfigSchema = z.object({
   local_llm: z.object({
     provider: z.literal('ollama'),
@@ -29,6 +43,7 @@ export const ConfigSchema = z.object({
     enabled: z.boolean(),
     log_file: z.string(),
   }),
+  mcp_servers: z.record(z.string(), McpServerSchema).default({}),
 })
 
 export type Config = z.infer<typeof ConfigSchema>
