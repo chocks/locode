@@ -21,9 +21,9 @@ export type PromptMode = 'hybrid' | 'local' | 'claude'
 export function formatPrompt(mode: PromptMode): string {
   switch (mode) {
     case 'local':
-      return '\x1b[36m> local\x1b[0m '
+      return '\x1b[36m> (local)\x1b[0m '
     case 'claude':
-      return '\x1b[35m> claude\x1b[0m '
+      return '\x1b[35m> (claude)\x1b[0m '
     default:
       return '\x1b[32m>\x1b[0m '
   }
