@@ -1,6 +1,8 @@
 import * as readline from 'readline'
 import { Orchestrator } from '../orchestrator/orchestrator'
 import type { OrchestratorResult } from '../orchestrator/orchestrator'
+import { createSpinner } from './spinner'
+import { formatPrompt, formatContinuation, type PromptMode } from './display'
 import { printResult, printStats } from './display'
 import type { Config } from '../config/schema'
 
@@ -51,6 +53,7 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
   }
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+  const mode: PromptMode = orch.isLocalOnly() ? 'local' : orch.isClaudeOnly() ? 'claude' : 'hybrid'
 
   console.log('locode — local-first AI coding CLI')
   console.log('Type your task, or "stats" for token usage, "exit" to quit.\n')
@@ -60,7 +63,7 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
   let processing = false
 
   const showPrompt = () => {
-    process.stdout.write(buffer.length === 0 ? '> ' : '... ')
+    process.stdout.write(buffer.length === 0 ? formatPrompt(mode) : formatContinuation())
   }
 
   rl.on('line', async (line) => {
@@ -102,7 +105,7 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
 
     // Continue collecting lines if a code fence is still open
     if (hasUnclosedCodeBlock(fullText)) {
-      process.stdout.write('... ')
+      process.stdout.write(formatContinuation())
       return
     }
 
@@ -114,14 +117,31 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
       let result: OrchestratorResult
 
       if (orch.isLocalOnly() || orch.isClaudeOnly() || orch.isLocalFallback()) {
-        // Forced modes skip confirmation
-        result = await orch.process(input, lastSummary)
+        const spinner = createSpinner('Thinking...')
+        spinner.start()
+        try {
+          result = await orch.process(input, lastSummary)
+        } finally {
+          spinner.stop()
+        }
       } else {
-        const decision = await orch.route(input)
+        const routeSpinner = createSpinner('Routing...')
+        routeSpinner.start()
+        let decision: Awaited<ReturnType<typeof orch.route>>
+        try {
+          decision = await orch.route(input)
+        } finally {
+          routeSpinner.stop()
+        }
 
-        // Skip confirmation for rule-matched routes (high confidence)
         if (decision.method === 'rule') {
-          result = await orch.execute(input, decision.agent, lastSummary)
+          const spinner = createSpinner('Thinking...')
+          spinner.start()
+          try {
+            result = await orch.execute(input, decision.agent, lastSummary)
+          } finally {
+            spinner.stop()
+          }
         } else {
           const otherAgent = decision.agent === 'claude' ? 'local' : 'claude'
           console.log(`\n${decision.agent} — ${decision.reason}`)
@@ -137,27 +157,45 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
           }
 
           const chosenAgent = action === 'switch' ? otherAgent : decision.agent
-          result = await orch.execute(input, chosenAgent, lastSummary)
+          const spinner = createSpinner('Thinking...')
+          spinner.start()
+          try {
+            result = await orch.execute(input, chosenAgent, lastSummary)
+          } finally {
+            spinner.stop()
+          }
         }
       }
 
-      // Suggest Claude escalation if local agent signals it can't handle the task
+      // Suggest Claude escalation
       if (result.agent === 'local' && !orch.isLocalOnly() && looksLikeStruggle(result.content)) {
         processing = false
         const answer = await askQuestion(rl, '\n[locode] Task may be too complex for local LLM. Route to Claude instead? [y/N] ')
         processing = true
         if (answer.trim().toLowerCase() === 'y') {
-          result = await orch.retryWithClaude(input, lastSummary)
+          const spinner = createSpinner('Thinking...')
+          spinner.start()
+          try {
+            result = await orch.retryWithClaude(input, lastSummary)
+          } finally {
+            spinner.stop()
+          }
         }
       }
 
-      // Suggest local handoff if Claude handled a task that looks simple (e.g. in --claude mode)
+      // Suggest local handoff
       if (result.agent === 'claude' && orch.isClaudeOnly() && looksLikeSimpleLocalTask(input)) {
         processing = false
         const answer = await askQuestion(rl, '\n[locode] This looks like a simple task. Route to local LLM to save tokens? [y/N] ')
         processing = true
         if (answer.trim().toLowerCase() === 'y') {
-          result = await orch.retryWithLocal(input, lastSummary)
+          const spinner = createSpinner('Thinking...')
+          spinner.start()
+          try {
+            result = await orch.retryWithLocal(input, lastSummary)
+          } finally {
+            spinner.stop()
+          }
         }
       }
 
