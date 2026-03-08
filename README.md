@@ -2,7 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/@chocks-dev/locode)](https://www.npmjs.com/package/@chocks-dev/locode)
 
-> **Alpha** — interfaces and config may change between releases.
+> **Alpha Software — Use at Your Own Risk**
+> Locode is under active development and has not been validated for production use. Interfaces, configuration formats, and behaviours may change without notice between releases. It is provided as-is, without warranty of any kind. Use in critical or production environments is not recommended at this stage.
 
 Local-first AI coding CLI. Routes simple tasks to a local LLM (Ollama), complex tasks to Claude. Saves tokens.
 
