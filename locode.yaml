@@ -16,12 +16,12 @@ claude:
 
 routing:
   rules:
-    - pattern: "find|grep|search|ls|cat|read|explore|where is"
+    - pattern: "refactor|architect|design|generate|write test|add .* test|fix|bug|debug"
+      agent: claude
+    - pattern: "grep|search|ls|cat|read|explore|where is"
       agent: local
     - pattern: "git log|git diff|git status|git blame"
       agent: local
-    - pattern: "refactor|architect|design|generate|write tests"
-      agent: claude
   ambiguous_resolver: local
   escalation_threshold: 0.7
 

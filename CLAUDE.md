@@ -100,3 +100,4 @@ Each module has a co-located test file (`*.test.ts`). External dependencies (Oll
 ## Known TODOs (not bugs, planned work)
 
 - Benchmark has no real Claude Code baseline — "Claude only" cost is estimated, not measured (requires Claude Code CLI installed and output parsing)
+- **User config drift** — `~/.locode/locode.yaml` doesn't auto-update when default routing rules improve. Need a strategy for merging new defaults into existing user configs (e.g., version the config, auto-merge non-customized fields, or `locode update-config` command)

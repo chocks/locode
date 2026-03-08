@@ -7,9 +7,9 @@ const mockConfig: Config = {
   claude: { model: 'claude-sonnet-4-6' },
   routing: {
     rules: [
-      { pattern: 'find|grep|search|ls|cat|read|explore|where is', agent: 'local' },
+      { pattern: 'refactor|architect|design|generate|write test|add .* test|fix|bug|debug', agent: 'claude' },
+      { pattern: 'grep|search|ls|cat|read|explore|where is', agent: 'local' },
       { pattern: 'git log|git diff|git status|git blame', agent: 'local' },
-      { pattern: 'refactor|architect|design|generate|write tests', agent: 'claude' },
     ],
     ambiguous_resolver: 'local',
     escalation_threshold: 0.7,
@@ -76,6 +76,27 @@ describe('Router', () => {
     expect(mockResolve).toHaveBeenCalled()
     expect(decision.method).toBe('llm')
     expect(decision.agent).toBe('local') // 0.8 > 0.7 threshold
+  })
+
+  it('routes "find and fix a bug" to claude, not local', async () => {
+    const router = new Router(mockConfig)
+    const decision = await router.classify('the deleteTask function has a bug - find and fix it and add a test')
+    expect(decision.agent).toBe('claude')
+    expect(decision.method).toBe('rule')
+  })
+
+  it('routes "fix this bug" to claude', async () => {
+    const router = new Router(mockConfig)
+    const decision = await router.classify('fix the off-by-one error in the loop')
+    expect(decision.agent).toBe('claude')
+    expect(decision.method).toBe('rule')
+  })
+
+  it('routes "add a test" to claude', async () => {
+    const router = new Router(mockConfig)
+    const decision = await router.classify('add a test for the deleteTask function')
+    expect(decision.agent).toBe('claude')
+    expect(decision.method).toBe('rule')
   })
 
   it('respects LLM decision when confidence exceeds threshold', async () => {
