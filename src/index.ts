@@ -68,7 +68,7 @@ program
         const config = loadConfig(path.resolve(opts.config))
         targetModel = config.local_llm.model
       } catch {
-        targetModel = 'qwen3:8b'
+        targetModel = 'qwen2.5-coder:7b'
       }
     }
     await runInstall({ model: targetModel })

@@ -3,7 +3,7 @@ import { readFileTool, shellTool, gitTool } from '../tools'
 import type { McpManager, McpTool } from '../mcp/client'
 
 interface LocalConfig {
-  local_llm: { provider: 'ollama'; model: string; base_url: string }
+  local_llm: { provider: 'ollama'; model: string; base_url: string; options?: Record<string, number> }
   context?: { handoff: 'summary'; max_summary_tokens: number }
 }
 
@@ -70,6 +70,11 @@ const TOOLS = [
   },
 ]
 
+// Strip <think>...</think> blocks that thinking-mode models (e.g. qwen3) may emit
+function stripThinkTags(text: string): string {
+  return text.replace(/^[\s\S]*?<\/think>\s*/m, '').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim()
+}
+
 async function dispatchTool(name: string, args: Record<string, string>): Promise<string> {
   switch (name) {
     case 'read_file': return readFileTool({ path: args.path })
@@ -129,22 +134,26 @@ export class LocalAgent {
         model: this.config.local_llm.model,
         messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
         tools: allTools as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
+        think: false,
+        ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
       })
 
       totalInputTokens += response.prompt_eval_count ?? 0
       totalOutputTokens += response.eval_count ?? 0
 
-      const toolCalls = (response.message as { content: string; tool_calls?: Array<{ function: { name: string; arguments: Record<string, string> } }> }).tool_calls
+      const rawToolCalls = (response.message as { content: string; tool_calls?: Array<{ function: { name: string; arguments: Record<string, string> } }> }).tool_calls
+      const toolCalls = rawToolCalls?.filter(tc => tc?.function?.name)
 
       // No tool calls — final response
       if (!toolCalls || toolCalls.length === 0) {
-        const content = response.message.content
+        const content = stripThinkTags(response.message.content)
         const summary = this.extractSummary(content)
         return { content, summary, inputTokens: totalInputTokens, outputTokens: totalOutputTokens }
       }
 
-      // Execute tool calls and append results
-      messages.push({ role: 'assistant', content: response.message.content ?? '' })
+      // Execute tool calls and append results — include tool_calls so model
+      // understands the subsequent tool-result messages in context
+      messages.push({ role: 'assistant', content: response.message.content ?? '', tool_calls: toolCalls } as { role: string; content: string })
       for (const tc of toolCalls) {
         const name = tc.function.name
         const args = tc.function.arguments as Record<string, string>
@@ -159,8 +168,10 @@ export class LocalAgent {
     const final = await Ollama.chat({
       model: this.config.local_llm.model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
+      think: false,
+      ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
     })
-    const content = final.message.content
+    const content = stripThinkTags(final.message.content)
     return {
       content,
       summary: this.extractSummary(content),

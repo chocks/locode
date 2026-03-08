@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { ConfigSchema } from './schema'
 
 const baseConfig = {
-  local_llm: { provider: 'ollama', model: 'qwen3:8b', base_url: 'http://localhost:11434' },
+  local_llm: { provider: 'ollama', model: 'qwen2.5-coder:7b', base_url: 'http://localhost:11434' },
   claude: { model: 'claude-sonnet-4-6' },
   routing: { rules: [], ambiguous_resolver: 'local', escalation_threshold: 0.7 },
   context: { handoff: 'summary', max_summary_tokens: 500 },

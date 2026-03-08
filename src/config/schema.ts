@@ -24,6 +24,7 @@ export const ConfigSchema = z.object({
     provider: z.literal('ollama'),
     model: z.string(),
     base_url: z.string().url(),
+    options: z.record(z.string(), z.number()).optional(),
   }),
   claude: z.object({
     model: z.string(),
