@@ -49,7 +49,7 @@ describe('install helpers', () => {
       mockPlatform.mockReturnValue('darwin')
 
       // 'which ollama' fails (not installed), 'which brew' fails (no brew)
-      mockExecFileSync.mockImplementation((cmd: string, _args?: readonly string[]) => {
+      mockExecFileSync.mockImplementation((cmd: string) => {
         if (cmd === 'which') throw new Error('not found')
         return ''
       })
