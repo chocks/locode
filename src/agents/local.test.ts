@@ -76,6 +76,58 @@ describe('LocalAgent', () => {
     expect(mockChat).toHaveBeenCalledTimes(2)
   })
 
+  it('includes tool_calls in assistant message history', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    const toolCalls = [{ function: { name: 'shell', arguments: { command: 'ls' } } }]
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: 'Let me check.',
+          tool_calls: toolCalls,
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { role: 'assistant', content: 'Done.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const agent = new LocalAgent(config)
+    await agent.run('list files')
+
+    // Second call should have assistant message WITH tool_calls in history
+    const secondCall = mockChat.mock.calls[1][0]
+    const assistantMsg = secondCall.messages.find(
+      (m: { role: string }) => m.role === 'assistant'
+    ) as { role: string; content: string; tool_calls?: unknown[] }
+    expect(assistantMsg).toBeDefined()
+    expect(assistantMsg.tool_calls).toEqual(toolCalls)
+  })
+
+  it('treats malformed tool_calls as no tool calls', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    // Model returns tool_calls with null/undefined entries
+    mockChat.mockResolvedValueOnce({
+      message: {
+        role: 'assistant',
+        content: 'Hello!',
+        tool_calls: [null, undefined],
+      },
+      prompt_eval_count: 50,
+      eval_count: 10,
+    } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const agent = new LocalAgent(config)
+    const result = await agent.run('hello')
+
+    // Should return the response directly, not crash or loop
+    expect(result.content).toBe('Hello!')
+    expect(mockChat).toHaveBeenCalledTimes(1)
+  })
+
   it('includes repo context in system prompt when provided', async () => {
     const agent = new LocalAgent(config)
     await agent.run('hello', undefined, '--- CLAUDE.md ---\n# My Project')

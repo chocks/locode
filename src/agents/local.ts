@@ -134,7 +134,8 @@ export class LocalAgent {
       totalInputTokens += response.prompt_eval_count ?? 0
       totalOutputTokens += response.eval_count ?? 0
 
-      const toolCalls = (response.message as { content: string; tool_calls?: Array<{ function: { name: string; arguments: Record<string, string> } }> }).tool_calls
+      const rawToolCalls = (response.message as { content: string; tool_calls?: Array<{ function: { name: string; arguments: Record<string, string> } }> }).tool_calls
+      const toolCalls = rawToolCalls?.filter(tc => tc?.function?.name)
 
       // No tool calls — final response
       if (!toolCalls || toolCalls.length === 0) {
@@ -143,8 +144,9 @@ export class LocalAgent {
         return { content, summary, inputTokens: totalInputTokens, outputTokens: totalOutputTokens }
       }
 
-      // Execute tool calls and append results
-      messages.push({ role: 'assistant', content: response.message.content ?? '' })
+      // Execute tool calls and append results — include tool_calls so model
+      // understands the subsequent tool-result messages in context
+      messages.push({ role: 'assistant', content: response.message.content ?? '', tool_calls: toolCalls } as { role: string; content: string })
       for (const tc of toolCalls) {
         const name = tc.function.name
         const args = tc.function.arguments as Record<string, string>
