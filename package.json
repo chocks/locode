@@ -1,6 +1,6 @@
 {
   "name": "@chocks-dev/locode",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Local-first AI coding CLI. Routes tasks between Ollama and Claude to save tokens.",
   "license": "MIT",
   "engines": {
