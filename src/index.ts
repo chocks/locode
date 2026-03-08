@@ -6,6 +6,7 @@ import { loadConfig, getDefaultConfigPath } from './config/loader'
 import { startRepl } from './cli/repl'
 import { Orchestrator } from './orchestrator/orchestrator'
 import { runInstall } from './cli/install'
+import { runUpdate } from './cli/update'
 import { runSetup, loadEnvFile } from './cli/setup'
 import { runBenchmark, resolvePrompts } from './cli/benchmark'
 import { createSpinner } from './cli/spinner'
@@ -75,6 +76,13 @@ program
       }
     }
     await runInstall({ model: targetModel })
+  })
+
+program
+  .command('update')
+  .description('Update locode to the latest version')
+  .action(async () => {
+    await runUpdate()
   })
 
 program
