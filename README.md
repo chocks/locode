@@ -10,6 +10,7 @@ Local-first AI coding CLI. Routes simple tasks to a local LLM (Ollama), complex 
 ## Demo
 ![locode-demo](https://github.com/user-attachments/assets/207f4d47-f8c9-4f4c-adf3-33d0a2bdf78d)
 
+⭐ If you find the idea interesting, please consider starring the repo. It helps a lot! 
 
 ## Quick Start
 
@@ -17,6 +18,18 @@ Local-first AI coding CLI. Routes simple tasks to a local LLM (Ollama), complex 
 npm install -g @chocks-dev/locode
 locode setup    # installs Ollama, picks a model, saves API key
 locode          # start chatting
+```
+
+## Architecture
+```
+User CLI
+   │
+   ▼
+Routing Logic
+   │
+   ├── Local LLM (fast tasks)
+   │
+   └── Claude (complex reasoning)
 ```
 
 ## Commands
