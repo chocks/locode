@@ -7,6 +7,10 @@
 
 Local-first AI coding CLI. Routes simple tasks to a local LLM (Ollama), complex tasks to Claude. Saves tokens.
 
+## Demo
+![locode-demo](https://github.com/user-attachments/assets/207f4d47-f8c9-4f4c-adf3-33d0a2bdf78d)
+
+
 ## Quick Start
 
 ```bash
