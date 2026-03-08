@@ -3,7 +3,7 @@ import { readFileTool, shellTool, gitTool } from '../tools'
 import type { McpManager, McpTool } from '../mcp/client'
 
 interface LocalConfig {
-  local_llm: { provider: 'ollama'; model: string; base_url: string }
+  local_llm: { provider: 'ollama'; model: string; base_url: string; options?: Record<string, number> }
   context?: { handoff: 'summary'; max_summary_tokens: number }
 }
 
@@ -135,6 +135,7 @@ export class LocalAgent {
         messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
         tools: allTools as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
         think: false,
+        ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
       })
 
       totalInputTokens += response.prompt_eval_count ?? 0
@@ -168,6 +169,7 @@ export class LocalAgent {
       model: this.config.local_llm.model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
       think: false,
+      ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
     })
     const content = stripThinkTags(final.message.content)
     return {

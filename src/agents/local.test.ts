@@ -166,6 +166,30 @@ describe('LocalAgent', () => {
     expect(result.content).toBe('Hi there!')
   })
 
+  it('passes options to Ollama.chat when configured', async () => {
+    const configWithOptions = {
+      local_llm: {
+        provider: 'ollama' as const,
+        model: 'qwen2.5-coder:7b',
+        base_url: 'http://localhost:11434',
+        options: { num_ctx: 1024, num_thread: 4 },
+      },
+    }
+    const agent = new LocalAgent(configWithOptions)
+    await agent.run('hello')
+
+    const chatCall = vi.mocked(Ollama.chat).mock.calls[0][0]
+    expect(chatCall.options).toEqual({ num_ctx: 1024, num_thread: 4 })
+  })
+
+  it('omits options from Ollama.chat when not configured', async () => {
+    const agent = new LocalAgent(config)
+    await agent.run('hello')
+
+    const chatCall = vi.mocked(Ollama.chat).mock.calls[0][0]
+    expect(chatCall.options).toBeUndefined()
+  })
+
   it('includes repo context in system prompt when provided', async () => {
     const agent = new LocalAgent(config)
     await agent.run('hello', undefined, '--- CLAUDE.md ---\n# My Project')
