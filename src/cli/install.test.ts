@@ -8,7 +8,13 @@ vi.mock('child_process', () => ({
   spawn: vi.fn(() => ({ unref: vi.fn() })),
 }))
 
-import { execFileSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
+import os from 'os'
+
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os')
+  return { ...actual, default: { ...actual, platform: vi.fn(() => 'darwin') } }
+})
 
 describe('install helpers', () => {
   beforeEach(() => {
@@ -33,5 +39,28 @@ describe('install helpers', () => {
     expect(mockExecFileSync).toHaveBeenCalledWith('which', ['ollama'], expect.any(Object))
     expect(mockExecFileSync).toHaveBeenCalledWith('ollama', ['list'], expect.any(Object))
     expect(mockExecFileSync).toHaveBeenCalledWith('ollama', ['pull', 'qwen2.5-coder:7b'], expect.any(Object))
+  })
+
+  describe('installOllama', () => {
+    it('uses curl install script on macOS when brew is not available', async () => {
+      const mockExecFileSync = vi.mocked(execFileSync)
+      const mockExecSync = vi.mocked(execSync)
+      const mockPlatform = vi.mocked(os.platform)
+      mockPlatform.mockReturnValue('darwin')
+
+      // 'which ollama' fails (not installed), 'which brew' fails (no brew)
+      mockExecFileSync.mockImplementation((cmd: string, args?: readonly string[]) => {
+        if (cmd === 'which') throw new Error('not found')
+        return ''
+      })
+
+      const { installOllama } = await import('./install')
+      installOllama()
+
+      expect(mockExecSync).toHaveBeenCalledWith(
+        'curl -fsSL https://ollama.com/install.sh | sh',
+        { stdio: 'inherit' }
+      )
+    })
   })
 })

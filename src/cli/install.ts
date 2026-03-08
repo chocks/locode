@@ -37,9 +37,9 @@ export function installOllama(): void {
     } catch {
       // brew not available
     }
-    console.log('Homebrew not found. Please install Ollama manually:')
-    console.log('  https://ollama.com/download')
-    process.exit(1)
+    console.log('Homebrew not found. Installing via official install script...')
+    execSync('curl -fsSL https://ollama.com/install.sh | sh', { stdio: 'inherit' })
+    return
   }
 
   if (platform === 'linux') {
