@@ -15,3 +15,20 @@ export function printResult(content: string, agent: string, method: string, reas
   console.log(`\n${label}${reasonText}`)
   console.log(content)
 }
+
+export type PromptMode = 'hybrid' | 'local' | 'claude'
+
+export function formatPrompt(mode: PromptMode): string {
+  switch (mode) {
+    case 'local':
+      return '\x1b[36m> local\x1b[0m '
+    case 'claude':
+      return '\x1b[35m> claude\x1b[0m '
+    default:
+      return '\x1b[32m>\x1b[0m '
+  }
+}
+
+export function formatContinuation(): string {
+  return '\x1b[2m...\x1b[0m '
+}
