@@ -45,6 +45,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@sentry/node": "^10.42.0",
     "commander": "^14.0.3",
     "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1",

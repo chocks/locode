@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import './instrument'
+import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 import { loadConfig, getDefaultConfigPath } from './config/loader'
 import { startRepl } from './cli/repl'
@@ -53,6 +55,7 @@ program
     }
     console.log(result.content)
     await orch.shutdown()
+    await Sentry.close(2000)
     process.exit(0)
   })
 
