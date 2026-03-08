@@ -6,6 +6,7 @@ import { Orchestrator } from './orchestrator/orchestrator'
 import { runInstall } from './cli/install'
 import { runSetup, loadEnvFile } from './cli/setup'
 import { runBenchmark, resolvePrompts } from './cli/benchmark'
+import { createSpinner } from './cli/spinner'
 import path from 'path'
 import pkgJson from '../package.json'
 const { version } = pkgJson
@@ -42,7 +43,14 @@ program
     await orch.initMcp()
     if (orch.isLocalOnly()) console.error('[local-only mode] Using local LLM')
     if (orch.isClaudeOnly()) console.error('[claude-only mode] Using Claude')
-    const result = await orch.process(prompt)
+    const spinner = createSpinner('Thinking...')
+    spinner.start()
+    let result
+    try {
+      result = await orch.process(prompt)
+    } finally {
+      spinner.stop()
+    }
     console.log(result.content)
     await orch.shutdown()
     process.exit(0)
