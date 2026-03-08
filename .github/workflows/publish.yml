@@ -37,3 +37,15 @@ jobs:
             --title "${{ github.ref_name }}" \
             --generate-notes \
             --verify-tag
+
+      - name: Create Sentry Release
+        if: env.SENTRY_AUTH_TOKEN != ''
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: self-x1l
+          SENTRY_PROJECT: node
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          sentry-cli releases new "${{ github.ref_name }}"
+          sentry-cli releases set-commits "${{ github.ref_name }}" --auto
+          sentry-cli releases finalize "${{ github.ref_name }}"
