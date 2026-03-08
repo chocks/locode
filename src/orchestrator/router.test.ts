@@ -3,7 +3,7 @@ import { Router } from './router'
 import type { Config } from '../config/schema'
 
 const mockConfig: Config = {
-  local_llm: { provider: 'ollama', model: 'qwen3:8b', base_url: 'http://localhost:11434' },
+  local_llm: { provider: 'ollama', model: 'qwen2.5-coder:7b', base_url: 'http://localhost:11434' },
   claude: { model: 'claude-sonnet-4-6' },
   routing: {
     rules: [

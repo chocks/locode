@@ -20,11 +20,11 @@ describe('writeGlobalConfig', () => {
 
   it('updates the model in an existing locode.yaml', () => {
     const yamlPath = path.join(tmpDir, 'locode.yaml')
-    writeGlobalConfig('qwen3:8b', tmpDir)
+    writeGlobalConfig('qwen2.5-coder:7b', tmpDir)
     writeGlobalConfig('qwen2.5-coder:14b', tmpDir)
     const content = fs.readFileSync(yamlPath, 'utf8')
     expect(content).toContain('model: qwen2.5-coder:14b')
-    expect(content).not.toContain('model: qwen3:8b')
+    expect(content).not.toContain('model: qwen2.5-coder:7b')
   })
 })
 

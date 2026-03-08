@@ -70,6 +70,11 @@ const TOOLS = [
   },
 ]
 
+// Strip <think>...</think> blocks that thinking-mode models (e.g. qwen3) may emit
+function stripThinkTags(text: string): string {
+  return text.replace(/^[\s\S]*?<\/think>\s*/m, '').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim()
+}
+
 async function dispatchTool(name: string, args: Record<string, string>): Promise<string> {
   switch (name) {
     case 'read_file': return readFileTool({ path: args.path })
@@ -129,6 +134,7 @@ export class LocalAgent {
         model: this.config.local_llm.model,
         messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
         tools: allTools as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
+        think: false,
       })
 
       totalInputTokens += response.prompt_eval_count ?? 0
@@ -139,7 +145,7 @@ export class LocalAgent {
 
       // No tool calls — final response
       if (!toolCalls || toolCalls.length === 0) {
-        const content = response.message.content
+        const content = stripThinkTags(response.message.content)
         const summary = this.extractSummary(content)
         return { content, summary, inputTokens: totalInputTokens, outputTokens: totalOutputTokens }
       }
@@ -161,8 +167,9 @@ export class LocalAgent {
     const final = await Ollama.chat({
       model: this.config.local_llm.model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
+      think: false,
     })
-    const content = final.message.content
+    const content = stripThinkTags(final.message.content)
     return {
       content,
       summary: this.extractSummary(content),
