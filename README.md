@@ -76,6 +76,27 @@ Key settings:
 
 Type `stats` in the REPL or press Ctrl+C to see token usage breakdown and estimated cost savings.
 
+## Telemetry (Opt-in)
+
+Locode can send anonymous error reports and performance data to [Sentry](https://sentry.io) to help improve reliability. **Telemetry is off by default** — no data is ever sent unless you explicitly enable it.
+
+To opt in, export your Sentry DSN in your shell profile (`~/.zshrc`, `~/.bashrc`, etc.):
+
+```bash
+export SENTRY_DSN="https://your-key@o123.ingest.sentry.io/456"
+```
+
+What gets reported when enabled:
+- Unhandled exceptions and stack traces
+- Performance traces for CLI operations (sampled at 20%)
+
+What is **never** sent:
+- Your prompts or LLM responses
+- API keys or credentials
+- File contents from your project
+
+To disable, remove or unset `SENTRY_DSN`.
+
 ## Benchmark
 
 Compare Claude token cost across 3 modes — run the same task and see exactly how much locode saves:
