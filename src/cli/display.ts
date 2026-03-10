@@ -29,6 +29,11 @@ export function formatPrompt(mode: PromptMode): string {
   }
 }
 
+export function formatSeparator(width?: number): string {
+  const cols = width ?? process.stdout.columns ?? 80
+  return `\x1b[2m${'─'.repeat(cols)}\x1b[0m`
+}
+
 export function formatContinuation(): string {
   return '\x1b[2m...\x1b[0m '
 }

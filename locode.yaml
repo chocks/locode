@@ -1,6 +1,6 @@
 local_llm:
   provider: ollama
-  model: qwen2.5-coder:7b
+  model: qwen3:8b
   base_url: http://localhost:11434
   # Ollama per-request options (passed directly to the Ollama API).
   # num_ctx:    context window size in tokens (lower = faster, uses less RAM)
@@ -21,6 +21,8 @@ routing:
     - pattern: "grep|search|ls|cat|read|explore|where is"
       agent: local
     - pattern: "git log|git diff|git status|git blame"
+      agent: local
+    - pattern: "^(hi|hello|hey|thanks|thank you|good morning|good evening|good night|how are you|what'?s up|sup|yo|bye|goodbye)\\b"
       agent: local
   ambiguous_resolver: local
   escalation_threshold: 0.7

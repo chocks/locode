@@ -2,7 +2,7 @@ import * as readline from 'readline'
 import { Orchestrator } from '../orchestrator/orchestrator'
 import type { OrchestratorResult } from '../orchestrator/orchestrator'
 import { createSpinner } from './spinner'
-import { formatPrompt, formatContinuation, type PromptMode } from './display'
+import { formatPrompt, formatContinuation, formatSeparator, type PromptMode } from './display'
 import { printResult, printStats } from './display'
 import type { Config } from '../config/schema'
 
@@ -63,7 +63,12 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
   let processing = false
 
   const showPrompt = () => {
-    process.stdout.write(buffer.length === 0 ? formatPrompt(mode) : formatContinuation())
+    if (buffer.length === 0) {
+      console.log(formatSeparator())
+      process.stdout.write(formatPrompt(mode))
+    } else {
+      process.stdout.write(formatContinuation())
+    }
   }
 
   rl.on('line', async (line) => {
@@ -112,6 +117,7 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
     processing = true
     const input = buffer.join('\n').trim()
     buffer = []
+    console.log(formatSeparator())
 
     try {
       let result: OrchestratorResult
