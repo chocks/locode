@@ -149,7 +149,8 @@ export class LocalAgent {
       } catch (err) {
         if (isOllamaConnectionError(err)) {
           throw new Error(
-            `Could not connect to Ollama at ${this.config.local_llm.base_url}. Is Ollama running? Start it with: ollama serve`
+            `Could not connect to Ollama at ${this.config.local_llm.base_url}. Is Ollama running? Start it with: ollama serve`,
+            { cause: err }
           )
         }
         throw err
@@ -193,7 +194,8 @@ export class LocalAgent {
     } catch (err) {
       if (isOllamaConnectionError(err)) {
         throw new Error(
-          `Could not connect to Ollama at ${this.config.local_llm.base_url}. Is Ollama running? Start it with: ollama serve`
+          `Could not connect to Ollama at ${this.config.local_llm.base_url}. Is Ollama running? Start it with: ollama serve`,
+          { cause: err }
         )
       }
       throw err

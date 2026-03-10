@@ -22,7 +22,8 @@ export function friendlyClaudeError(err: unknown): Error | null {
   // APIConnectionError — no status, name matches
   if (status === undefined && err.name === 'APIConnectionError') {
     return new Error(
-      'Could not reach the Claude API. Check your internet connection or https://status.anthropic.com'
+      'Could not reach the Claude API. Check your internet connection or https://status.anthropic.com',
+      { cause: err }
     )
   }
 
@@ -31,20 +32,23 @@ export function friendlyClaudeError(err: unknown): Error | null {
 
   if (status === 401) {
     return new Error(
-      'Invalid API key. Check ANTHROPIC_API_KEY in ~/.locode/.env'
+      'Invalid API key. Check ANTHROPIC_API_KEY in ~/.locode/.env',
+      { cause: err }
     )
   }
   if (status === 429) {
     return new Error(
-      'Claude API rate limit exceeded. Your usage may have hit its limit — wait a few minutes or check your plan at https://console.anthropic.com'
+      'Claude API rate limit exceeded. Your usage may have hit its limit — wait a few minutes or check your plan at https://console.anthropic.com',
+      { cause: err }
     )
   }
   if (status >= 500) {
     return new Error(
-      `Claude API error (${status}). The API may be experiencing issues — check https://status.anthropic.com`
+      `Claude API error (${status}). The API may be experiencing issues — check https://status.anthropic.com`,
+      { cause: err }
     )
   }
-  return new Error(`Claude API error: ${err.message}`)
+  return new Error(`Claude API error: ${err.message}`, { cause: err })
 }
 
 function nextMidnightUtc(): number {
