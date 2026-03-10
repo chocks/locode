@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ClaudeAgent, friendlyClaudeError } from './claude'
 
+vi.mock('../tools', () => ({
+  readFileTool: vi.fn().mockResolvedValue('file contents here'),
+  shellTool: vi.fn().mockResolvedValue('shell output here'),
+  gitTool: vi.fn().mockResolvedValue('git output here'),
+}))
+
+import { readFileTool, gitTool } from '../tools'
+
 // Minimal mock classes matching the Anthropic SDK error hierarchy
 class MockAPIError extends Error {
   readonly status: number
@@ -42,6 +50,20 @@ function makeCreateResponse(text: string, inputTokens: number, outputTokens: num
       data: {
         content: [{ type: 'text', text }],
         usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+        stop_reason: 'end_turn',
+      },
+      response: { headers },
+    }),
+  }
+}
+
+function makeToolUseResponse(toolName: string, toolId: string, input: Record<string, string>, inputTokens: number, outputTokens: number, headers = makeHeaders('50000', '100000', '2026-03-07T00:00:00.000Z')) {
+  return {
+    withResponse: vi.fn().mockResolvedValue({
+      data: {
+        content: [{ type: 'tool_use', id: toolId, name: toolName, input }],
+        usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+        stop_reason: 'tool_use',
       },
       response: { headers },
     }),
@@ -108,12 +130,87 @@ describe('ClaudeAgent', () => {
     expect(createCall.system).toContain('# My Project')
   })
 
-  it('omits system parameter when no repo context provided', async () => {
+  it('includes base system prompt when no repo context provided', async () => {
     const agent = new ClaudeAgent(config)
     await agent.run('hello')
 
     const createCall = mockCreate.mock.calls[0][0]
-    expect(createCall.system).toBeUndefined()
+    expect(createCall.system).toBeDefined()
+    expect(createCall.system).toContain('tool')
+  })
+
+  it('includes base system prompt alongside repo context', async () => {
+    const agent = new ClaudeAgent(config)
+    await agent.run('hello', undefined, '--- CLAUDE.md ---\n# My Project')
+
+    const createCall = mockCreate.mock.calls[0][0]
+    expect(createCall.system).toContain('# My Project')
+    expect(createCall.system).toContain('tool')
+  })
+
+  it('passes tools to the API call', async () => {
+    const agent = new ClaudeAgent(config)
+    await agent.run('hello')
+
+    const createCall = mockCreate.mock.calls[0][0]
+    expect(createCall.tools).toBeDefined()
+    expect(createCall.tools.length).toBe(3)
+    const toolNames = createCall.tools.map((t: { name: string }) => t.name)
+    expect(toolNames).toContain('read_file')
+    expect(toolNames).toContain('shell')
+    expect(toolNames).toContain('git')
+  })
+
+  it('executes tool calls and loops back to API', async () => {
+    // First call: tool_use, second call: final text
+    mockCreate
+      .mockReturnValueOnce(makeToolUseResponse('read_file', 'toolu_1', { path: 'src/foo.ts' }, 500, 50))
+      .mockReturnValueOnce(makeCreateResponse('Found the bug in foo.ts', 800, 200))
+
+    const agent = new ClaudeAgent(config)
+    const result = await agent.run('find the bug')
+
+    expect(mockCreate).toHaveBeenCalledTimes(2)
+    expect(readFileTool).toHaveBeenCalledWith({ path: 'src/foo.ts' })
+    expect(result.content).toContain('Found the bug')
+  })
+
+  it('accumulates tokens across tool rounds', async () => {
+    mockCreate
+      .mockReturnValueOnce(makeToolUseResponse('shell', 'toolu_1', { command: 'ls src' }, 500, 50))
+      .mockReturnValueOnce(makeCreateResponse('Here are the files.', 800, 200))
+
+    const agent = new ClaudeAgent(config)
+    const result = await agent.run('list files')
+
+    expect(result.inputTokens).toBe(500 + 800)
+    expect(result.outputTokens).toBe(50 + 200)
+  })
+
+  it('respects max tool rounds and returns last response', async () => {
+    // 5 tool calls then a final text (but max rounds should cap it)
+    for (let i = 0; i < 10; i++) {
+      mockCreate.mockReturnValueOnce(makeToolUseResponse('read_file', `toolu_${i}`, { path: 'f.ts' }, 100, 10))
+    }
+    mockCreate.mockReturnValueOnce(makeCreateResponse('gave up', 100, 10))
+
+    const agent = new ClaudeAgent(config)
+    const result = await agent.run('infinite loop')
+
+    // Should stop before 10 rounds (max 5) + 1 final call without tools
+    expect(mockCreate.mock.calls.length).toBeLessThanOrEqual(7)
+    expect(result.content).toBeDefined()
+  })
+
+  it('dispatches git tool calls correctly', async () => {
+    mockCreate
+      .mockReturnValueOnce(makeToolUseResponse('git', 'toolu_1', { args: 'log --oneline -5' }, 500, 50))
+      .mockReturnValueOnce(makeCreateResponse('Recent commits show...', 800, 200))
+
+    const agent = new ClaudeAgent(config)
+    await agent.run('show recent commits')
+
+    expect(gitTool).toHaveBeenCalledWith({ args: 'log --oneline -5' })
   })
 
   it('generateHandoffSummary falls back to truncated context on error', async () => {
