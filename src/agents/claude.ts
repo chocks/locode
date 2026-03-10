@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { AgentResult } from './local'
+import { readFileTool, shellTool, gitTool } from '../tools'
 
 interface ClaudeConfig {
   claude: { model: string; token_threshold: number }
@@ -56,7 +57,55 @@ function nextMidnightUtc(): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
 }
 
-const SYSTEM_PROMPT = `You are a code analysis and implementation assistant. You cannot run commands, read files, or access the filesystem. Work only with the context provided in the conversation. If you need more information, ask the user to provide it. Never fabricate command outputs or pretend to execute code.`
+// Tool schemas in Anthropic format
+// TODO(v0.2): extract shared tool registry (see docs/plans/2026-03-07-locode-v02-architecture-design.md §4.6)
+const TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'read_file',
+    description: 'Read the contents of a file',
+    input_schema: {
+      type: 'object' as const,
+      properties: { path: { type: 'string', description: 'Absolute or relative path to the file' } },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'shell',
+    description: 'Run a read-only shell command (ls, grep, find, cat, etc.)',
+    input_schema: {
+      type: 'object' as const,
+      properties: { command: { type: 'string', description: 'The shell command to run' } },
+      required: ['command'],
+    },
+  },
+  {
+    name: 'git',
+    description: 'Run a read-only git command (log, diff, status, blame, etc.)',
+    input_schema: {
+      type: 'object' as const,
+      properties: { args: { type: 'string', description: 'Git subcommand and arguments, e.g. "log --oneline -10"' } },
+      required: ['args'],
+    },
+  },
+]
+
+async function dispatchTool(name: string, input: Record<string, string>): Promise<string> {
+  switch (name) {
+    case 'read_file': return readFileTool({ path: input.path })
+    case 'shell':     return shellTool({ command: input.command })
+    case 'git':       return gitTool({ args: input.args })
+    default:          return `Unknown tool: ${name}`
+  }
+}
+
+const SYSTEM_PROMPT = `You are a coding assistant with tool access. Use the provided tools to read files, run commands, and query git — never fabricate outputs or guess at file contents.
+
+Available tools:
+- read_file: read any file by path
+- shell: run read-only commands (ls, cat, grep, find, etc.)
+- git: run git queries (log, diff, status, blame, etc.)
+
+Always use tools to gather information before answering. End your response with a SUMMARY section (2-3 sentences).`
 
 export class ClaudeAgent {
   private client: Anthropic
@@ -69,6 +118,9 @@ export class ClaudeAgent {
 
   async run(prompt: string, context?: string, repoContext?: string): Promise<ClaudeAgentResult> {
     const messages: Anthropic.MessageParam[] = []
+    const systemPrompt = repoContext
+      ? `Project context:\n${repoContext}\n\n${SYSTEM_PROMPT}`
+      : SYSTEM_PROMPT
 
     if (context) {
       messages.push({
@@ -79,15 +131,60 @@ export class ClaudeAgent {
       messages.push({ role: 'user', content: prompt })
     }
 
+    let totalInputTokens = 0
+    let totalOutputTokens = 0
+    const MAX_TOOL_ROUNDS = 5
+
+    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+      let data: Anthropic.Message
+      let httpResponse: { headers: { get(name: string): string | null } }
+      try {
+        const result = await this.client.messages.create({
+          model: this.config.claude.model,
+          max_tokens: 8096,
+          system: systemPrompt,
+          tools: TOOLS,
+          messages,
+        }).withResponse()
+        data = result.data
+        httpResponse = result.response
+      } catch (err) {
+        const friendly = friendlyClaudeError(err)
+        if (friendly) throw friendly
+        throw err
+      }
+
+      totalInputTokens += data.usage.input_tokens
+      totalOutputTokens += data.usage.output_tokens
+
+      // No tool use — return final response
+      if (data.stop_reason !== 'tool_use') {
+        const content = data.content
+          .filter(b => b.type === 'text')
+          .map(b => (b as { type: 'text'; text: string }).text)
+          .join('\n')
+        return { content, summary: content.slice(0, 500), inputTokens: totalInputTokens, outputTokens: totalOutputTokens, rateLimitInfo: this.parseRateLimitHeaders(httpResponse.headers) }
+      }
+
+      // Execute tool calls
+      const toolBlocks = data.content.filter(b => b.type === 'tool_use') as Array<{ type: 'tool_use'; id: string; name: string; input: Record<string, string> }>
+      messages.push({ role: 'assistant', content: data.content })
+      const toolResults: Anthropic.ToolResultBlockParam[] = []
+      for (const tc of toolBlocks) {
+        const output = await dispatchTool(tc.name, tc.input)
+        toolResults.push({ type: 'tool_result', tool_use_id: tc.id, content: output })
+      }
+      messages.push({ role: 'user', content: toolResults })
+    }
+
+    // Max rounds exceeded — make one final call without tools
     let data: Anthropic.Message
     let httpResponse: { headers: { get(name: string): string | null } }
     try {
       const result = await this.client.messages.create({
         model: this.config.claude.model,
         max_tokens: 8096,
-        system: repoContext
-        ? `Project context:\n${repoContext}\n\n${SYSTEM_PROMPT}`
-        : SYSTEM_PROMPT,
+        system: systemPrompt,
         messages,
       }).withResponse()
       data = result.data
@@ -102,12 +199,11 @@ export class ClaudeAgent {
       .filter(b => b.type === 'text')
       .map(b => (b as { type: 'text'; text: string }).text)
       .join('\n')
-
     return {
       content,
       summary: content.slice(0, 500),
-      inputTokens: data.usage.input_tokens,
-      outputTokens: data.usage.output_tokens,
+      inputTokens: totalInputTokens + data.usage.input_tokens,
+      outputTokens: totalOutputTokens + data.usage.output_tokens,
       rateLimitInfo: this.parseRateLimitHeaders(httpResponse.headers),
     }
   }
