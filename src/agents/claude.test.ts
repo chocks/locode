@@ -108,12 +108,23 @@ describe('ClaudeAgent', () => {
     expect(createCall.system).toContain('# My Project')
   })
 
-  it('omits system parameter when no repo context provided', async () => {
+  it('includes base system prompt when no repo context provided', async () => {
     const agent = new ClaudeAgent(config)
     await agent.run('hello')
 
     const createCall = mockCreate.mock.calls[0][0]
-    expect(createCall.system).toBeUndefined()
+    expect(createCall.system).toBeDefined()
+    expect(createCall.system).toContain('cannot run commands')
+    expect(createCall.system).toContain('Never fabricate command outputs')
+  })
+
+  it('includes base system prompt alongside repo context', async () => {
+    const agent = new ClaudeAgent(config)
+    await agent.run('hello', undefined, '--- CLAUDE.md ---\n# My Project')
+
+    const createCall = mockCreate.mock.calls[0][0]
+    expect(createCall.system).toContain('# My Project')
+    expect(createCall.system).toContain('cannot run commands')
   })
 
   it('generateHandoffSummary falls back to truncated context on error', async () => {

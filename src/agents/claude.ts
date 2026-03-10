@@ -56,6 +56,8 @@ function nextMidnightUtc(): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
 }
 
+const SYSTEM_PROMPT = `You are a code analysis and implementation assistant. You cannot run commands, read files, or access the filesystem. Work only with the context provided in the conversation. If you need more information, ask the user to provide it. Never fabricate command outputs or pretend to execute code.`
+
 export class ClaudeAgent {
   private client: Anthropic
   private config: ClaudeConfig
@@ -83,7 +85,9 @@ export class ClaudeAgent {
       const result = await this.client.messages.create({
         model: this.config.claude.model,
         max_tokens: 8096,
-        ...(repoContext ? { system: `Project context:\n${repoContext}` } : {}),
+        system: repoContext
+        ? `Project context:\n${repoContext}\n\n${SYSTEM_PROMPT}`
+        : SYSTEM_PROMPT,
         messages,
       }).withResponse()
       data = result.data
