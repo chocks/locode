@@ -95,6 +95,13 @@ function mcpToolsToOllama(mcpTools: McpTool[]) {
   }))
 }
 
+function isOllamaConnectionError(err: unknown): boolean {
+  if (err instanceof TypeError && err.message === 'fetch failed') return true
+  const cause = (err as { cause?: { code?: string } })?.cause
+  if (cause?.code === 'ECONNREFUSED' || cause?.code === 'ECONNRESET') return true
+  return false
+}
+
 export class LocalAgent {
   private config: LocalConfig
   private mcpManager: McpManager | null
@@ -130,13 +137,24 @@ export class LocalAgent {
     }
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await Ollama.chat({
-        model: this.config.local_llm.model,
-        messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
-        tools: allTools as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
-        think: false,
-        ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
-      })
+      let response: Awaited<ReturnType<typeof Ollama.chat>>
+      try {
+        response = await Ollama.chat({
+          model: this.config.local_llm.model,
+          messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
+          tools: allTools as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
+          think: false,
+          ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
+        })
+      } catch (err) {
+        if (isOllamaConnectionError(err)) {
+          throw new Error(
+            `Could not connect to Ollama at ${this.config.local_llm.base_url}. Is Ollama running? Start it with: ollama serve`,
+            { cause: err }
+          )
+        }
+        throw err
+      }
 
       totalInputTokens += response.prompt_eval_count ?? 0
       totalOutputTokens += response.eval_count ?? 0
@@ -165,12 +183,23 @@ export class LocalAgent {
     }
 
     // Fallback if max rounds exceeded — get final answer without tools
-    const final = await Ollama.chat({
-      model: this.config.local_llm.model,
-      messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
-      think: false,
-      ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
-    })
+    let final: Awaited<ReturnType<typeof Ollama.chat>>
+    try {
+      final = await Ollama.chat({
+        model: this.config.local_llm.model,
+        messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
+        think: false,
+        ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
+      })
+    } catch (err) {
+      if (isOllamaConnectionError(err)) {
+        throw new Error(
+          `Could not connect to Ollama at ${this.config.local_llm.base_url}. Is Ollama running? Start it with: ollama serve`,
+          { cause: err }
+        )
+      }
+      throw err
+    }
     const content = stripThinkTags(final.message.content)
     return {
       content,

@@ -20,7 +20,8 @@
     "prepublishOnly": "npm run build && npm test",
     "release:patch": "npm version patch --no-git-tag-version",
     "release:minor": "npm version minor --no-git-tag-version",
-    "release:major": "npm version major --no-git-tag-version"
+    "release:major": "npm version major --no-git-tag-version",
+    "prepare": "husky"
   },
   "bin": {
     "locode": "./dist/src/index.js"
@@ -57,9 +58,14 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.3.3",
     "eslint": "^10.0.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
     "vitest": "^4.0.18"
+  },
+  "lint-staged": {
+    "*.{ts,js,mjs}": "eslint --fix"
   }
 }
