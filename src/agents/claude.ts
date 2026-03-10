@@ -15,6 +15,38 @@ export interface ClaudeAgentResult extends AgentResult {
   rateLimitInfo: RateLimitInfo | null
 }
 
+export function friendlyClaudeError(err: unknown): Error | null {
+  if (!(err instanceof Error)) return null
+  const status = (err as { status?: number }).status
+
+  // APIConnectionError — no status, name matches
+  if (status === undefined && err.name === 'APIConnectionError') {
+    return new Error(
+      'Could not reach the Claude API. Check your internet connection or https://status.anthropic.com'
+    )
+  }
+
+  // No status number — not an API error we can map
+  if (status === undefined) return null
+
+  if (status === 401) {
+    return new Error(
+      'Invalid API key. Check ANTHROPIC_API_KEY in ~/.locode/.env'
+    )
+  }
+  if (status === 429) {
+    return new Error(
+      'Claude API rate limit exceeded. Your usage may have hit its limit — wait a few minutes or check your plan at https://console.anthropic.com'
+    )
+  }
+  if (status >= 500) {
+    return new Error(
+      `Claude API error (${status}). The API may be experiencing issues — check https://status.anthropic.com`
+    )
+  }
+  return new Error(`Claude API error: ${err.message}`)
+}
+
 function nextMidnightUtc(): number {
   const now = new Date()
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
@@ -41,14 +73,24 @@ export class ClaudeAgent {
       messages.push({ role: 'user', content: prompt })
     }
 
-    const { data: response, response: httpResponse } = await this.client.messages.create({
-      model: this.config.claude.model,
-      max_tokens: 8096,
-      ...(repoContext ? { system: `Project context:\n${repoContext}` } : {}),
-      messages,
-    }).withResponse()
+    let data: Anthropic.Message
+    let httpResponse: { headers: { get(name: string): string | null } }
+    try {
+      const result = await this.client.messages.create({
+        model: this.config.claude.model,
+        max_tokens: 8096,
+        ...(repoContext ? { system: `Project context:\n${repoContext}` } : {}),
+        messages,
+      }).withResponse()
+      data = result.data
+      httpResponse = result.response
+    } catch (err) {
+      const friendly = friendlyClaudeError(err)
+      if (friendly) throw friendly
+      throw err
+    }
 
-    const content = response.content
+    const content = data.content
       .filter(b => b.type === 'text')
       .map(b => (b as { type: 'text'; text: string }).text)
       .join('\n')
@@ -56,8 +98,8 @@ export class ClaudeAgent {
     return {
       content,
       summary: content.slice(0, 500),
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      inputTokens: data.usage.input_tokens,
+      outputTokens: data.usage.output_tokens,
       rateLimitInfo: this.parseRateLimitHeaders(httpResponse.headers),
     }
   }

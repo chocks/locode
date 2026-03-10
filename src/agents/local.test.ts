@@ -190,6 +190,25 @@ describe('LocalAgent', () => {
     expect(chatCall.options).toBeUndefined()
   })
 
+  it('throws a helpful error when Ollama is not reachable', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    const fetchError = new TypeError('fetch failed')
+    fetchError.cause = { code: 'ECONNREFUSED' }
+    mockChat.mockRejectedValue(fetchError)
+
+    const agent = new LocalAgent(config)
+    await expect(agent.run('hello')).rejects.toThrow(/[Oo]llama/)
+    await expect(agent.run('hello')).rejects.toThrow(/running/)
+  })
+
+  it('re-throws non-connection errors from Ollama unchanged', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    mockChat.mockRejectedValueOnce(new Error('model not found'))
+
+    const agent = new LocalAgent(config)
+    await expect(agent.run('hello')).rejects.toThrow('model not found')
+  })
+
   it('includes repo context in system prompt when provided', async () => {
     const agent = new LocalAgent(config)
     await agent.run('hello', undefined, '--- CLAUDE.md ---\n# My Project')

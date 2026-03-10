@@ -1,5 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ClaudeAgent } from './claude'
+import { ClaudeAgent, friendlyClaudeError } from './claude'
+
+// Minimal mock classes matching the Anthropic SDK error hierarchy
+class MockAPIError extends Error {
+  readonly status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'APIError'
+    this.status = status
+  }
+}
+
+class MockConnectionError extends Error {
+  readonly status = undefined
+  constructor(message: string) {
+    super(message)
+    this.name = 'APIConnectionError'
+  }
+}
 
 const makeHeaders = (remaining: string | null, limit: string | null, reset: string | null) => ({
   get: (h: string) => {
@@ -103,5 +121,65 @@ describe('ClaudeAgent', () => {
     const agent = new ClaudeAgent(config)
     const summary = await agent.generateHandoffSummary('A'.repeat(1000))
     expect(summary.length).toBeLessThanOrEqual(500)
+  })
+
+  it('wraps AuthenticationError with a helpful message', async () => {
+    const err = new MockAPIError(401, 'invalid x-api-key')
+    mockCreate.mockReturnValueOnce({ withResponse: vi.fn().mockRejectedValue(err) })
+    const agent = new ClaudeAgent(config)
+    await expect(agent.run('hello')).rejects.toThrow(/ANTHROPIC_API_KEY/)
+  })
+
+  it('wraps RateLimitError with a helpful message', async () => {
+    const err = new MockAPIError(429, 'rate limit exceeded')
+    mockCreate.mockReturnValueOnce({ withResponse: vi.fn().mockRejectedValue(err) })
+    const agent = new ClaudeAgent(config)
+    await expect(agent.run('hello')).rejects.toThrow(/[Rr]ate.?limit/)
+  })
+
+  it('wraps server errors with status page link', async () => {
+    const err = new MockAPIError(500, 'internal server error')
+    mockCreate.mockReturnValueOnce({ withResponse: vi.fn().mockRejectedValue(err) })
+    const agent = new ClaudeAgent(config)
+    await expect(agent.run('hello')).rejects.toThrow(/status\.anthropic\.com/)
+  })
+
+  it('wraps connection errors with status page link', async () => {
+    const err = new MockConnectionError('Connection error')
+    mockCreate.mockReturnValueOnce({ withResponse: vi.fn().mockRejectedValue(err) })
+    const agent = new ClaudeAgent(config)
+    await expect(agent.run('hello')).rejects.toThrow(/status\.anthropic\.com/)
+  })
+
+  it('re-throws unknown errors unchanged', async () => {
+    const err = new Error('something weird')
+    mockCreate.mockReturnValueOnce({ withResponse: vi.fn().mockRejectedValue(err) })
+    const agent = new ClaudeAgent(config)
+    await expect(agent.run('hello')).rejects.toThrow('something weird')
+  })
+})
+
+describe('friendlyClaudeError', () => {
+  it('returns helpful message for 401', () => {
+    const err = new MockAPIError(401, 'invalid x-api-key')
+    const result = friendlyClaudeError(err)
+    expect(result.message).toContain('ANTHROPIC_API_KEY')
+  })
+
+  it('returns helpful message for 429', () => {
+    const err = new MockAPIError(429, 'rate limit exceeded')
+    const result = friendlyClaudeError(err)
+    expect(result.message).toMatch(/[Rr]ate.?limit/)
+  })
+
+  it('returns helpful message for 500+', () => {
+    const err = new MockAPIError(529, 'overloaded')
+    const result = friendlyClaudeError(err)
+    expect(result.message).toContain('status.anthropic.com')
+  })
+
+  it('returns null for non-API errors', () => {
+    const err = new Error('random')
+    expect(friendlyClaudeError(err)).toBeNull()
   })
 })
