@@ -22,6 +22,8 @@ routing:
       agent: local
     - pattern: "git log|git diff|git status|git blame"
       agent: local
+    - pattern: "^(hi|hello|hey|thanks|thank you|good morning|good evening|good night|how are you|what'?s up|sup|yo|bye|goodbye)\\b"
+      agent: local
   ambiguous_resolver: local
   escalation_threshold: 0.7
 

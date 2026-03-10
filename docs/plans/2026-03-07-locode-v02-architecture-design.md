@@ -712,3 +712,74 @@ The evolution is incremental. No big-bang rewrite.
 - Optimize end-to-end latency
 
 Each phase is independently shippable and testable.
+
+---
+
+## 13. Versioned Config & Update Strategy
+
+User configs at `~/.locode/locode.yaml` drift from shipped defaults when new routing rules, config fields, or defaults are added across releases. The setup wizard's `CONFIG_TEMPLATE` is a second source of drift.
+
+### Design
+
+Add a `config_version: N` field to `locode.yaml`. Bump it whenever defaults change meaningfully (new routing rules, new config sections, changed defaults).
+
+```yaml
+config_version: 2   # bumped when defaults change
+local_llm:
+  ...
+```
+
+### Behaviour on startup
+
+```
+loadConfig()
+  ├── Read user config
+  ├── Compare config_version against CURRENT_CONFIG_VERSION constant
+  ├── If missing or older:
+  │     stderr: "[locode] Your config is outdated (v1 → v2). Run `locode update-config` to see what changed."
+  │     Continue with user's existing config (no forced changes)
+  └── If current: proceed normally
+```
+
+### `locode update-config` command
+
+Interactive command that:
+1. Loads user config and shipped defaults
+2. Diffs them section by section
+3. For each new/changed section, shows the diff and asks:
+   - `[A]ccept new default` — merge the new value
+   - `[S]kip` — keep user's current value
+   - `[V]iew` — show full context before deciding
+4. Bumps `config_version` to current
+5. Writes updated config
+
+```
+$ locode update-config
+
+Config update: v1 → v2
+
+[NEW] routing rule: greetings → local
+  + pattern: "^(hi|hello|hey|thanks|...)\\b"
+  + agent: local
+  Accept? [Y/n] y
+
+[NEW] context.max_file_bytes: 51200
+  Accept? [Y/n] y
+
+[NEW] context.repo_context_files: ["CLAUDE.md"]
+  Accept? [Y/n] y
+
+✓ Config updated to v2
+```
+
+### Rules
+
+- **Never auto-modify** user config without explicit consent
+- **Always warn** on version mismatch, never silently ignore
+- **Single source of truth** for defaults: a `DEFAULT_CONFIG` constant in code (replaces both `locode.yaml` in repo root and `CONFIG_TEMPLATE` in setup.ts)
+- **Setup wizard** uses `DEFAULT_CONFIG` + sets `config_version` to current on first run
+- Bump `config_version` in the same PR that changes defaults
+
+### Migration phase
+
+Belongs in **Phase 1** alongside tool executor + safety, since it's foundational infrastructure that all other phases benefit from.

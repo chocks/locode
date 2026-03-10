@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatPrompt, formatContinuation } from './display'
+import { formatPrompt, formatContinuation, formatSeparator } from './display'
 
 describe('formatPrompt', () => {
   it('returns green prompt for hybrid mode', () => {
@@ -26,5 +26,23 @@ describe('formatContinuation', () => {
     const result = formatContinuation()
     expect(result).toContain('\x1b[2m')
     expect(result).toContain('...')
+  })
+})
+
+describe('formatSeparator', () => {
+  it('returns a line of ─ characters', () => {
+    const result = formatSeparator(40)
+    expect(result).toContain('─'.repeat(40))
+  })
+
+  it('uses dim ANSI styling', () => {
+    const result = formatSeparator(20)
+    expect(result).toContain('\x1b[2m')
+    expect(result).toContain('\x1b[0m')
+  })
+
+  it('defaults to 80 columns when no width given', () => {
+    const result = formatSeparator()
+    expect(result).toContain('─'.repeat(80))
   })
 })
