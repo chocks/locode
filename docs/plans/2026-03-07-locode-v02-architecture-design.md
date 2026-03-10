@@ -563,7 +563,7 @@ New files: 10. Modified files: 5. Unchanged files: 12.
 # Existing (unchanged)
 local_llm:
   provider: ollama
-  model: qwen2.5-coder:7b
+  model: qwen3:8b
   base_url: http://localhost:11434
 
 claude:

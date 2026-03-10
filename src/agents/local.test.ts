@@ -15,7 +15,7 @@ vi.mock('ollama', () => ({
 
 describe('LocalAgent', () => {
   const config = {
-    local_llm: { provider: 'ollama' as const, model: 'qwen2.5-coder:7b', base_url: 'http://localhost:11434' },
+    local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' },
   }
 
   beforeEach(() => {
@@ -44,7 +44,7 @@ describe('LocalAgent', () => {
 
   it('truncates summary to max_summary_tokens', async () => {
     const configWithSmallSummary = {
-      local_llm: { provider: 'ollama' as const, model: 'qwen2.5-coder:7b', base_url: 'http://localhost:11434' },
+      local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' },
       context: { handoff: 'summary' as const, max_summary_tokens: 10 },
     }
     const agent = new LocalAgent(configWithSmallSummary)
@@ -70,7 +70,7 @@ describe('LocalAgent', () => {
         eval_count: 8,
       } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
 
-    const agent = new LocalAgent({ local_llm: { provider: 'ollama' as const, model: 'qwen2.5-coder:7b', base_url: 'http://localhost:11434' } })
+    const agent = new LocalAgent({ local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' } })
     const result = await agent.run('what does echo hello output?')
     expect(result.content).toContain('hello')
     expect(mockChat).toHaveBeenCalledTimes(2)
@@ -170,7 +170,7 @@ describe('LocalAgent', () => {
     const configWithOptions = {
       local_llm: {
         provider: 'ollama' as const,
-        model: 'qwen2.5-coder:7b',
+        model: 'qwen3:8b',
         base_url: 'http://localhost:11434',
         options: { num_ctx: 1024, num_thread: 4 },
       },

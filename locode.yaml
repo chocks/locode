@@ -1,6 +1,6 @@
 local_llm:
   provider: ollama
-  model: qwen2.5-coder:7b
+  model: qwen3:8b
   base_url: http://localhost:11434
   # Ollama per-request options (passed directly to the Ollama API).
   # num_ctx:    context window size in tokens (lower = faster, uses less RAM)

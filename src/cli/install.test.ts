@@ -33,12 +33,12 @@ describe('install helpers', () => {
     const { runInstall } = await import('./install')
 
     // Should not throw
-    await expect(runInstall({ model: 'qwen2.5-coder:7b' })).resolves.toBeUndefined()
+    await expect(runInstall({ model: 'qwen3:8b' })).resolves.toBeUndefined()
 
     // Should have checked for ollama, checked daemon, and pulled model
     expect(mockExecFileSync).toHaveBeenCalledWith('which', ['ollama'], expect.any(Object))
     expect(mockExecFileSync).toHaveBeenCalledWith('ollama', ['list'], expect.any(Object))
-    expect(mockExecFileSync).toHaveBeenCalledWith('ollama', ['pull', 'qwen2.5-coder:7b'], expect.any(Object))
+    expect(mockExecFileSync).toHaveBeenCalledWith('ollama', ['pull', 'qwen3:8b'], expect.any(Object))
   })
 
   describe('installOllama', () => {

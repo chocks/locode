@@ -58,7 +58,7 @@ If no `ANTHROPIC_API_KEY` is set, locode automatically runs in local-only mode.
 
 Edit `locode.yaml` for routing rules, models, and thresholds:
 
-- `local_llm.model` — Ollama model (default: `qwen2.5-coder:7b`)
+- `local_llm.model` — Ollama model (default: `qwen3:8b`)
 - `routing.rules` — regex patterns that route tasks to local or Claude
 - `routing.escalation_threshold` — confidence below this escalates to Claude
 
