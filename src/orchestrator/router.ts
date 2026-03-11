@@ -53,13 +53,27 @@ export class Router {
         model: this.config.local_llm.model,
         messages: [{
           role: 'user',
-          content: `Classify this coding task as "local" or "claude".
-- "local": file reading, grep, search, shell commands, git queries, repo exploration, release/tag/version
-- "claude": code generation, refactoring, architecture, writing tests, complex explanations
+          content: `Classify the following coding task.
 
-Task: "${prompt}"
+Agents:
 
-Reply with JSON only: {"agent": "local", "confidence": 0.85}`
+- "local"
+  Repository exploration tasks such as:
+  file reading, grep, searching code, shell commands, git queries,
+  repo structure discovery, release/version inspection.
+
+- "claude"
+  Code generation, refactoring, architecture design,
+  writing tests, debugging, fixing bugs, explaining code behavior.
+
+Task:
+"${prompt}"
+
+Use confidence below 0.7 if the task could reasonably fit either agent.
+
+Reply with JSON only. Do not include any text outside the JSON object.
+
+{"agent": "local | claude", "confidence": 0.0-1.0}`
         }],
       })
       const answer = response.message.content.trim()

@@ -1,3 +1,5 @@
 export { readFileTool } from './readFile'
 export { shellTool } from './shell'
 export { gitTool } from './git'
+export { writeFileTool } from './writeFile'
+export { editFileTool } from './editFile'

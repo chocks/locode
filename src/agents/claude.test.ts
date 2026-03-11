@@ -5,9 +5,11 @@ vi.mock('../tools', () => ({
   readFileTool: vi.fn().mockResolvedValue('file contents here'),
   shellTool: vi.fn().mockResolvedValue('shell output here'),
   gitTool: vi.fn().mockResolvedValue('git output here'),
+  writeFileTool: vi.fn().mockResolvedValue('Written 42 bytes to /tmp/foo.ts'),
+  editFileTool: vi.fn().mockResolvedValue('Applied edit to /tmp/foo.ts'),
 }))
 
-import { readFileTool, gitTool } from '../tools'
+import { readFileTool, gitTool, writeFileTool, editFileTool } from '../tools'
 
 // Minimal mock classes matching the Anthropic SDK error hierarchy
 class MockAPIError extends Error {
@@ -154,11 +156,13 @@ describe('ClaudeAgent', () => {
 
     const createCall = mockCreate.mock.calls[0][0]
     expect(createCall.tools).toBeDefined()
-    expect(createCall.tools.length).toBe(3)
+    expect(createCall.tools.length).toBe(5)
     const toolNames = createCall.tools.map((t: { name: string }) => t.name)
     expect(toolNames).toContain('read_file')
     expect(toolNames).toContain('shell')
     expect(toolNames).toContain('git')
+    expect(toolNames).toContain('write_file')
+    expect(toolNames).toContain('edit_file')
   })
 
   it('executes tool calls and loops back to API', async () => {
@@ -188,8 +192,8 @@ describe('ClaudeAgent', () => {
   })
 
   it('respects max tool rounds and returns last response', async () => {
-    // 5 tool calls then a final text (but max rounds should cap it)
-    for (let i = 0; i < 10; i++) {
+    // 15 tool calls then a final text (but max rounds should cap it at 10)
+    for (let i = 0; i < 15; i++) {
       mockCreate.mockReturnValueOnce(makeToolUseResponse('read_file', `toolu_${i}`, { path: 'f.ts' }, 100, 10))
     }
     mockCreate.mockReturnValueOnce(makeCreateResponse('gave up', 100, 10))
@@ -197,8 +201,8 @@ describe('ClaudeAgent', () => {
     const agent = new ClaudeAgent(config)
     const result = await agent.run('infinite loop')
 
-    // Should stop before 10 rounds (max 5) + 1 final call without tools
-    expect(mockCreate.mock.calls.length).toBeLessThanOrEqual(7)
+    // Should stop before 15 rounds (max 10) + 1 final call without tools
+    expect(mockCreate.mock.calls.length).toBeLessThanOrEqual(12)
     expect(result.content).toBeDefined()
   })
 
@@ -211,6 +215,28 @@ describe('ClaudeAgent', () => {
     await agent.run('show recent commits')
 
     expect(gitTool).toHaveBeenCalledWith({ args: 'log --oneline -5' })
+  })
+
+  it('dispatches write_file tool calls correctly', async () => {
+    mockCreate
+      .mockReturnValueOnce(makeToolUseResponse('write_file', 'toolu_1', { path: 'src/new.ts', content: 'export {}' }, 500, 50))
+      .mockReturnValueOnce(makeCreateResponse('Created the file.', 800, 200))
+
+    const agent = new ClaudeAgent(config)
+    await agent.run('create a new file')
+
+    expect(writeFileTool).toHaveBeenCalledWith({ path: 'src/new.ts', content: 'export {}' })
+  })
+
+  it('dispatches edit_file tool calls correctly', async () => {
+    mockCreate
+      .mockReturnValueOnce(makeToolUseResponse('edit_file', 'toolu_1', { path: 'src/foo.ts', old_string: 'return 1', new_string: 'return 2' }, 500, 50))
+      .mockReturnValueOnce(makeCreateResponse('Fixed the bug.', 800, 200))
+
+    const agent = new ClaudeAgent(config)
+    await agent.run('fix the bug')
+
+    expect(editFileTool).toHaveBeenCalledWith({ path: 'src/foo.ts', old_string: 'return 1', new_string: 'return 2' })
   })
 
   it('generateHandoffSummary falls back to truncated context on error', async () => {

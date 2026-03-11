@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { AgentResult } from './local'
-import { readFileTool, shellTool, gitTool } from '../tools'
+import { readFileTool, shellTool, gitTool, writeFileTool, editFileTool } from '../tools'
 
 interface ClaudeConfig {
   claude: { model: string; token_threshold: number }
@@ -87,25 +87,89 @@ const TOOLS: Anthropic.Tool[] = [
       required: ['args'],
     },
   },
+  {
+    name: 'write_file',
+    description: 'Write content to a file, creating it if needed or overwriting if it exists',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'Path to the file to write' },
+        content: { type: 'string', description: 'The full content to write' },
+      },
+      required: ['path', 'content'],
+    },
+  },
+  {
+    name: 'edit_file',
+    description: 'Edit a file by replacing an exact string match. The old_string must appear exactly once in the file.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'Path to the file to edit' },
+        old_string: { type: 'string', description: 'The exact string to find (must be unique in file)' },
+        new_string: { type: 'string', description: 'The replacement string' },
+      },
+      required: ['path', 'old_string', 'new_string'],
+    },
+  },
 ]
 
 async function dispatchTool(name: string, input: Record<string, string>): Promise<string> {
   switch (name) {
     case 'read_file': return readFileTool({ path: input.path })
     case 'shell':     return shellTool({ command: input.command })
-    case 'git':       return gitTool({ args: input.args })
-    default:          return `Unknown tool: ${name}`
+    case 'git':        return gitTool({ args: input.args })
+    case 'write_file': return writeFileTool({ path: input.path, content: input.content })
+    case 'edit_file':  return editFileTool({ path: input.path, old_string: input.old_string, new_string: input.new_string })
+    default:           return `Unknown tool: ${name}`
   }
 }
 
-const SYSTEM_PROMPT = `You are a coding assistant with tool access. Use the provided tools to read files, run commands, and query git — never fabricate outputs or guess at file contents.
+const SYSTEM_PROMPT = `You are a coding assistant with tool access. Your job is to inspect a repository, understand the code, and safely modify it when asked.
 
-Available tools:
-- read_file: read any file by path
-- shell: run read-only commands (ls, cat, grep, find, etc.)
-- git: run git queries (log, diff, status, blame, etc.)
+Never fabricate outputs or assume file contents. Always use tools to inspect the repository before making decisions.
 
-Always use tools to gather information before answering. End your response with a SUMMARY section (2-3 sentences).`
+AVAILABLE TOOLS
+
+read_file(path)
+  Read a file from the repository.
+
+shell(command)
+  Run read-only shell commands (ls, cat, grep, find, etc.). Only read-only commands are permitted; others are blocked.
+
+git(args)
+  Run git queries such as log, diff, status, and blame.
+
+edit_file(path, old_string, new_string)
+  Replace an exact string in a file. This is the preferred method for modifying code.
+  Include enough surrounding context in old_string to ensure a unique match.
+
+write_file(path, content)
+  Create or overwrite a file. Only use this for new files or when a full rewrite is explicitly required.
+
+WORKFLOW
+
+1. Explore — Use shell, git, or read_file to understand the repository structure and find relevant code.
+2. Understand — Read the relevant files and search for references before proposing changes.
+3. Plan — Briefly describe what needs to change and why.
+4. Modify — Apply the smallest possible change that fixes the issue.
+5. Verify — Re-read the file after editing to confirm the change was applied correctly.
+
+EDITING RULES
+
+- Prefer edit_file for modifications.
+- Modify the smallest possible code region.
+- Do not rewrite entire files unless necessary.
+- Preserve existing formatting and style.
+- Do not introduce unrelated refactors.
+
+CONSTRAINTS
+
+- You have a limited number of tool calls per task. Be efficient.
+- For non-trivial changes, explain your reasoning before applying.
+
+End every response with:
+SUMMARY: (2-3 sentences describing what was done.)`
 
 export class ClaudeAgent {
   private client: Anthropic
@@ -133,7 +197,7 @@ export class ClaudeAgent {
 
     let totalInputTokens = 0
     let totalOutputTokens = 0
-    const MAX_TOOL_ROUNDS = 5
+    const MAX_TOOL_ROUNDS = 10
 
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       let data: Anthropic.Message
@@ -141,7 +205,7 @@ export class ClaudeAgent {
       try {
         const result = await this.client.messages.create({
           model: this.config.claude.model,
-          max_tokens: 8096,
+          max_tokens: 16384,
           system: systemPrompt,
           tools: TOOLS,
           messages,
@@ -183,7 +247,7 @@ export class ClaudeAgent {
     try {
       const result = await this.client.messages.create({
         model: this.config.claude.model,
-        max_tokens: 8096,
+        max_tokens: 16384,
         system: systemPrompt,
         messages,
       }).withResponse()

@@ -6,7 +6,12 @@ const ALLOWED_COMMANDS = new Set([
   'tree', 'du', 'df', 'ps', 'uname', 'date',
 ])
 
+const SHELL_OPERATORS = /[|;&`$()]/
+
 export async function shellTool({ command }: { command: string }): Promise<string> {
+  if (SHELL_OPERATORS.test(command)) {
+    return `[blocked] Shell operators (pipe, semicolon, etc.) are not supported. Run each command separately.`
+  }
   const parts = command.trim().split(/\s+/)
   const base = (parts[0].split('/').pop() ?? parts[0])
   if (!ALLOWED_COMMANDS.has(base)) {
