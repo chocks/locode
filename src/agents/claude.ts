@@ -205,7 +205,7 @@ export class ClaudeAgent {
       try {
         const result = await this.client.messages.create({
           model: this.config.claude.model,
-          max_tokens: 8192,
+          max_tokens: 16384,
           system: systemPrompt,
           tools: TOOLS,
           messages,
@@ -247,7 +247,7 @@ export class ClaudeAgent {
     try {
       const result = await this.client.messages.create({
         model: this.config.claude.model,
-        max_tokens: 8192,
+        max_tokens: 16384,
         system: systemPrompt,
         messages,
       }).withResponse()
