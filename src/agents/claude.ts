@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { AgentResult } from './local'
-import { readFileTool, shellTool, gitTool } from '../tools'
+import { readFileTool, shellTool, gitTool, writeFileTool, editFileTool } from '../tools'
 
 interface ClaudeConfig {
   claude: { model: string; token_threshold: number }
@@ -87,25 +87,54 @@ const TOOLS: Anthropic.Tool[] = [
       required: ['args'],
     },
   },
+  {
+    name: 'write_file',
+    description: 'Write content to a file, creating it if needed or overwriting if it exists',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'Path to the file to write' },
+        content: { type: 'string', description: 'The full content to write' },
+      },
+      required: ['path', 'content'],
+    },
+  },
+  {
+    name: 'edit_file',
+    description: 'Edit a file by replacing an exact string match. The old_string must appear exactly once in the file.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'Path to the file to edit' },
+        old_string: { type: 'string', description: 'The exact string to find (must be unique in file)' },
+        new_string: { type: 'string', description: 'The replacement string' },
+      },
+      required: ['path', 'old_string', 'new_string'],
+    },
+  },
 ]
 
 async function dispatchTool(name: string, input: Record<string, string>): Promise<string> {
   switch (name) {
     case 'read_file': return readFileTool({ path: input.path })
     case 'shell':     return shellTool({ command: input.command })
-    case 'git':       return gitTool({ args: input.args })
-    default:          return `Unknown tool: ${name}`
+    case 'git':        return gitTool({ args: input.args })
+    case 'write_file': return writeFileTool({ path: input.path, content: input.content })
+    case 'edit_file':  return editFileTool({ path: input.path, old_string: input.old_string, new_string: input.new_string })
+    default:           return `Unknown tool: ${name}`
   }
 }
 
-const SYSTEM_PROMPT = `You are a coding assistant with tool access. Use the provided tools to read files, run commands, and query git — never fabricate outputs or guess at file contents.
+const SYSTEM_PROMPT = `You are a coding assistant with tool access. Use the provided tools to read files, run commands, query git, and modify code — never fabricate outputs or guess at file contents.
 
 Available tools:
 - read_file: read any file by path
 - shell: run read-only commands (ls, cat, grep, find, etc.)
 - git: run git queries (log, diff, status, blame, etc.)
+- edit_file: replace an exact string in a file (preferred for modifications)
+- write_file: create or overwrite a file with full content
 
-Always use tools to gather information before answering. End your response with a SUMMARY section (2-3 sentences).`
+When asked to fix a bug or modify code, use edit_file to apply changes. Always use tools to gather information before answering. End your response with a SUMMARY section (2-3 sentences).`
 
 export class ClaudeAgent {
   private client: Anthropic
