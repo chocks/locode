@@ -192,8 +192,8 @@ describe('ClaudeAgent', () => {
   })
 
   it('respects max tool rounds and returns last response', async () => {
-    // 5 tool calls then a final text (but max rounds should cap it)
-    for (let i = 0; i < 10; i++) {
+    // 15 tool calls then a final text (but max rounds should cap it at 10)
+    for (let i = 0; i < 15; i++) {
       mockCreate.mockReturnValueOnce(makeToolUseResponse('read_file', `toolu_${i}`, { path: 'f.ts' }, 100, 10))
     }
     mockCreate.mockReturnValueOnce(makeCreateResponse('gave up', 100, 10))
@@ -201,8 +201,8 @@ describe('ClaudeAgent', () => {
     const agent = new ClaudeAgent(config)
     const result = await agent.run('infinite loop')
 
-    // Should stop before 10 rounds (max 5) + 1 final call without tools
-    expect(mockCreate.mock.calls.length).toBeLessThanOrEqual(7)
+    // Should stop before 15 rounds (max 10) + 1 final call without tools
+    expect(mockCreate.mock.calls.length).toBeLessThanOrEqual(12)
     expect(result.content).toBeDefined()
   })
 

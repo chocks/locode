@@ -197,7 +197,7 @@ export class ClaudeAgent {
 
     let totalInputTokens = 0
     let totalOutputTokens = 0
-    const MAX_TOOL_ROUNDS = 5
+    const MAX_TOOL_ROUNDS = 10
 
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       let data: Anthropic.Message
