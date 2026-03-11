@@ -28,6 +28,22 @@ describe('shellTool', () => {
     const result = await shellTool({ command: 'rm -rf /' })
     expect(result).toContain('blocked')
   })
+
+  it('blocks pipe operators', async () => {
+    const result = await shellTool({ command: 'find . -name "*.ts" | grep foo' })
+    expect(result).toContain('blocked')
+    expect(result).toContain('pipe')
+  })
+
+  it('blocks semicolons', async () => {
+    const result = await shellTool({ command: 'echo hello; rm -rf /' })
+    expect(result).toContain('blocked')
+  })
+
+  it('blocks command substitution', async () => {
+    const result = await shellTool({ command: 'echo $(whoami)' })
+    expect(result).toContain('blocked')
+  })
 })
 
 describe('writeFileTool', () => {
