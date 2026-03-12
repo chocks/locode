@@ -14,29 +14,25 @@ export interface AgentResult {
 }
 
 // Static parts of the system prompt — tool list is injected dynamically
-const LOCAL_PROMPT_HEADER = `You are a local coding assistant with tool access.
+const LOCAL_PROMPT_HEADER = `You are a coding assistant. Use the provided tools to answer questions.
 
-You MUST use the provided tools to fulfill requests.
-Never say you cannot access files, run commands, or query git.
-
-AVAILABLE TOOLS
+TOOLS
 
 `
 
 const LOCAL_PROMPT_FOOTER = `
 
-CRITICAL RULES
+INSTRUCTIONS
+1. Call a tool to get the information you need.
+2. When you receive the tool result, write your answer immediately.
+3. Do NOT call another tool unless the first result was insufficient.
+4. Base your answer ONLY on tool results. Never guess file contents.
+5. You cannot modify files. Only read and explore.
 
-1. ALWAYS call a tool before answering questions about files or code. NEVER guess.
-2. Call ONE tool at a time. After each tool result, decide: do you have enough to answer?
-3. If YES — respond immediately with your answer. Do NOT call more tools.
-4. If NO — call exactly one more tool to get the missing information.
-5. Do not fabricate or guess file contents.
-6. You do NOT write or modify files.
-7. Keep answers concise and based on tool results.
-
-End every response with:
-SUMMARY: (2-3 sentences describing what you found.)`
+RESPONSE FORMAT
+After receiving tool results, respond with:
+ANSWER: <your answer based on the tool output>
+SUMMARY: <2-3 sentences>`
 
 // Strip <think>...</think> blocks that thinking-mode models (e.g. qwen3) may emit.
 // If stripping leaves nothing, return the content inside the tags instead.

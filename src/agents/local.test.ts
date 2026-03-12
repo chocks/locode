@@ -439,6 +439,6 @@ describe('LocalAgent', () => {
     const systemMsg = chatCall.messages[0]
     expect(systemMsg.role).toBe('system')
     expect((systemMsg as { content: string }).content).toContain('# My Project')
-    expect((systemMsg as { content: string }).content).toContain('You are a local coding assistant')
+    expect((systemMsg as { content: string }).content).toContain('You are a coding assistant')
   })
 })
