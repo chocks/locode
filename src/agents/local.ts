@@ -25,22 +25,15 @@ AVAILABLE TOOLS
 
 const LOCAL_PROMPT_FOOTER = `
 
-CRITICAL: You MUST call a tool before answering ANY question about files, code, or the repository. NEVER guess or assume file contents. If you are unsure, use read_file or run_command to check first.
+CRITICAL RULES
 
-WORKFLOW
-
-1. Use run_command to explore (ls, tree, find, grep).
-2. Use read_file to read file contents.
-3. Use git_query for history, diffs, or blame.
-4. Answer ONLY after gathering real data from tools.
-
-RULES
-
-- ALWAYS call a tool before responding about files or code.
-- If a user asks about a file, use read_file to read it first.
-- Do not fabricate or guess file contents — use tools.
-- You do NOT write or modify files.
-- Keep explanations concise. Focus on tool results.
+1. ALWAYS call a tool before answering questions about files or code. NEVER guess.
+2. Call ONE tool at a time. After each tool result, decide: do you have enough to answer?
+3. If YES — respond immediately with your answer. Do NOT call more tools.
+4. If NO — call exactly one more tool to get the missing information.
+5. Do not fabricate or guess file contents.
+6. You do NOT write or modify files.
+7. Keep answers concise and based on tool results.
 
 End every response with:
 SUMMARY: (2-3 sentences describing what you found.)`
