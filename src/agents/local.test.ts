@@ -108,6 +108,68 @@ describe('LocalAgent', () => {
     expect(mockChat).toHaveBeenCalledTimes(2)
   })
 
+  it('forces a final response when model returns empty after tool use', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    // Round 0: tool call succeeds, Round 1: empty content with no tool calls
+    // Round 2 (retry without tools): model produces actual answer
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          content: '',
+          tool_calls: [{ function: { name: 'read_file', arguments: { path: 'README.md' } } }],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: '', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 3,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'The README starts with # Locode', tool_calls: [] },
+        prompt_eval_count: 50,
+        eval_count: 10,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const agent = new LocalAgent(config, makeMockExecutor())
+    const result = await agent.run('show readme')
+
+    expect(result.content).toContain('Locode')
+    expect(mockChat).toHaveBeenCalledTimes(3)
+  })
+
+  it('breaks out of loop when same tool call fails repeatedly', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    const treeResponse = {
+      message: {
+        content: '',
+        tool_calls: [{ function: { name: 'run_command', arguments: { command: 'tree' } } }],
+      },
+      prompt_eval_count: 30,
+      eval_count: 5,
+    } as unknown as Awaited<ReturnType<typeof Ollama.chat>>
+    // Two rounds of the same failing call, then fallback without tools
+    mockChat
+      .mockResolvedValueOnce(treeResponse)
+      .mockResolvedValueOnce(treeResponse)
+      .mockResolvedValueOnce({
+        message: { content: 'Here are the files.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const executor = makeMockExecutor()
+    vi.mocked(executor.execute).mockResolvedValue({ success: false, output: '', error: 'Error: spawnSync tree ENOENT' })
+    const agent = new LocalAgent(config, executor)
+    const result = await agent.run('show files')
+
+    // Should stop after 2 identical failures, not retry more
+    const executeCalls = vi.mocked(executor.execute).mock.calls
+    expect(executeCalls.length).toBe(2)
+    expect(result.content).toContain('files')
+  })
+
   it('includes tool_calls in assistant message history', async () => {
     const mockChat = vi.mocked(Ollama.chat)
     const toolCalls = [{ function: { name: 'shell', arguments: { command: 'ls' } } }]

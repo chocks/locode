@@ -112,6 +112,8 @@ export class LocalAgent {
     let totalInputTokens = 0
     let totalOutputTokens = 0
     const MAX_TOOL_ROUNDS = 5  // prevent infinite loops
+    let lastFailedCall = ''
+    let consecutiveFailures = 0
 
     const allTools = this.toolExecutor.registry.listForLLM()
 
@@ -159,6 +161,13 @@ export class LocalAgent {
       // No tool calls — final response
       if (!toolCalls || toolCalls.length === 0) {
         const content = stripThinkTags(response.message.content)
+        // If content is empty after tool rounds, retry once without tools to force a response
+        if (!content && round > 0) {
+          if (this.verbose) {
+            process.stderr.write('[retry] empty response after tool use, retrying without tools\n')
+          }
+          break
+        }
         const summary = this.extractSummary(content)
         return { content, summary, inputTokens: totalInputTokens, outputTokens: totalOutputTokens }
       }
@@ -166,6 +175,7 @@ export class LocalAgent {
       // Execute tool calls and append results — include tool_calls so model
       // understands the subsequent tool-result messages in context
       messages.push({ role: 'assistant', content: response.message.content ?? '', tool_calls: toolCalls } as { role: string; content: string })
+      let allFailed = true
       for (const tc of toolCalls) {
         const name = tc.function.name
         const args = tc.function.arguments as Record<string, string>
@@ -179,6 +189,29 @@ export class LocalAgent {
           process.stderr.write(`[result] ${preview}\n`)
         }
         messages.push({ role: 'tool', content: result })
+
+        // Track repeated failures of the same call
+        const callKey = `${name}:${JSON.stringify(args)}`
+        if (!toolResult.success) {
+          if (callKey === lastFailedCall) {
+            consecutiveFailures++
+          } else {
+            lastFailedCall = callKey
+            consecutiveFailures = 1
+          }
+        } else {
+          allFailed = false
+          lastFailedCall = ''
+          consecutiveFailures = 0
+        }
+      }
+
+      // Break if same call failed twice — model is stuck
+      if (allFailed && consecutiveFailures >= 2) {
+        if (this.verbose) {
+          process.stderr.write(`[stuck] same tool call failed ${consecutiveFailures} times, breaking\n`)
+        }
+        break
       }
     }
 
