@@ -75,6 +75,27 @@ describe('ToolRegistry', () => {
     })
   })
 
+  describe('describeForPrompt', () => {
+    it('generates human-readable tool descriptions', () => {
+      const registry = new ToolRegistry()
+      registry.register(makeTool({ name: 'read_file', description: 'Read the contents of a file' }))
+      registry.register(makeTool({
+        name: 'run_command',
+        description: 'Run a shell command',
+        inputSchema: {
+          type: 'object',
+          properties: { command: { type: 'string' } },
+          required: ['command'],
+        },
+      }))
+      const output = registry.describeForPrompt()
+      expect(output).toContain('read_file(path)')
+      expect(output).toContain('Read the contents of a file')
+      expect(output).toContain('run_command(command)')
+      expect(output).toContain('Run a shell command')
+    })
+  })
+
   describe('listForClaude (Anthropic format)', () => {
     it('converts tools to Anthropic tool schema', () => {
       const registry = new ToolRegistry()

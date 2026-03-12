@@ -14,7 +14,7 @@
 | 2 | `feat/v02-tool-definitions` | Migrate existing tools to `definitions/` format | ✅ Done |
 | 3 | `feat/v02-safety-gate` | `SafetyGate` + config schema additions | ✅ Done |
 | 4 | `feat/v02-tool-executor` | `ToolExecutor` (ties registry + safety) | ✅ Done |
-| 5 | — | Wire into `LocalAgent` + `Orchestrator` | ⬜ Not started |
+| 5 | `feat/v02-wire-executor` | Wire into `LocalAgent` + `Orchestrator` | ✅ Done |
 | 6 | — | New tools (`search_code`, `list_files`) | ⬜ Not started |
 
 ---
@@ -82,3 +82,23 @@
 - `executeParallel(calls)` — runs multiple tool calls concurrently via `Promise.all`
 - Write-category tools have their path checked against `SafetyGate.checkWritePath()`
 - Handler errors are caught and returned as `ToolResult` failures (never throws)
+
+## PR 5: Wire into LocalAgent + ClaudeAgent + Orchestrator
+
+**Modified files:**
+- `src/agents/local.ts` — accepts optional `ToolExecutor`, uses it for schemas + dispatch
+- `src/agents/claude.ts` — accepts optional `ToolExecutor`, uses it for schemas + dispatch
+- `src/orchestrator/orchestrator.ts` — creates registry → safety gate → executor, passes to agents
+- `src/tools/executor.ts` — made `registry` readonly public for schema access
+
+**Wiring:**
+- Orchestrator creates `createDefaultRegistry()` → `SafetyGate(config.safety)` → `ToolExecutor`
+- Passes executor to both `LocalAgent` and `ClaudeAgent`
+- MCP tools now register into the shared registry (instead of separate McpManager path)
+- Old inline `dispatchTool()` + `TOOLS` constants kept as fallback when no executor
+- `ToolResult` → string adapter: `result.success ? result.output : \`Error: \${result.error}\``
+
+**Tool name changes (when executor active):**
+- `shell` → `run_command`
+- `git` → `git_query`
+- `read_file`, `write_file`, `edit_file` — unchanged

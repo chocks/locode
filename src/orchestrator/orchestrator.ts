@@ -6,6 +6,9 @@ import type { Config } from '../config/schema'
 import { injectFileContext } from './file-context-injector'
 import { loadRepoContext } from './repo-context-loader'
 import { McpManager } from '../mcp/client'
+import { ToolExecutor } from '../tools/executor'
+import { SafetyGate } from '../tools/safety-gate'
+import { createDefaultRegistry } from '../tools/definitions/default-registry'
 
 function isRateLimitError(err: unknown): boolean {
   return err instanceof Error && 'status' in err && (err as { status: number }).status === 429
@@ -20,6 +23,7 @@ export interface OrchestratorResult extends AgentResult {
 interface OrchestratorOptions {
   localOnly?: boolean
   claudeOnly?: boolean
+  verbose?: boolean
 }
 
 export class Orchestrator {
@@ -30,20 +34,27 @@ export class Orchestrator {
   private config: Config
   private localOnly: boolean
   private claudeOnly: boolean
+  private verbose: boolean
   private localFallback: boolean = false
   private fallbackSummary: string = ''
   private resetsAt: number = 0
   private repoContext: string = ''
   private mcpManager: McpManager | null = null
 
+  private toolExecutor: ToolExecutor
+
   constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent, options?: OrchestratorOptions) {
     this.config = config
     this.router = new Router(config)
-    this.localAgent = localAgent ?? new LocalAgent(config)
-    this.claudeAgent = claudeAgent ?? new ClaudeAgent(config)
+    const registry = createDefaultRegistry()
+    const safetyGate = new SafetyGate(config.safety)
+    this.toolExecutor = new ToolExecutor(registry, safetyGate)
+    this.localAgent = localAgent ?? new LocalAgent(config, this.toolExecutor, { verbose: options?.verbose })
+    this.claudeAgent = claudeAgent ?? new ClaudeAgent(config, this.toolExecutor)
     this.tracker = new TokenTracker(config.token_tracking)
     this.claudeOnly = options?.claudeOnly ?? false
     this.localOnly = options?.localOnly ?? (!process.env.ANTHROPIC_API_KEY)
+    this.verbose = options?.verbose ?? false
     this.repoContext = loadRepoContext(config.context.repo_context_files, config.context.max_file_bytes)
   }
 
@@ -51,8 +62,23 @@ export class Orchestrator {
     if (Object.keys(this.config.mcp_servers).length === 0) return
     this.mcpManager = new McpManager()
     await this.mcpManager.connectAll(this.config)
-    // Rebuild local agent with MCP tools
-    this.localAgent = new LocalAgent(this.config, this.mcpManager)
+    // Register MCP tools into the shared registry
+    const mcpTools = this.mcpManager.getTools()
+    for (const tool of mcpTools) {
+      const manager = this.mcpManager
+      this.toolExecutor.registry.register({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        category: 'read',
+        async handler(args) {
+          const output = await manager.callTool(tool.name, args as Record<string, string>)
+          return { success: true, output }
+        },
+      })
+    }
+    // Rebuild local agent with updated registry (MCP tools now included)
+    this.localAgent = new LocalAgent(this.config, this.toolExecutor, { verbose: this.verbose })
   }
 
   async shutdown(): Promise<void> {

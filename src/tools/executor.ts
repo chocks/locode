@@ -9,10 +9,14 @@ export interface ToolCall {
 }
 
 export class ToolExecutor {
+  readonly registry: ToolRegistry
+
   constructor(
-    private registry: ToolRegistry,
+    registry: ToolRegistry,
     private safetyGate: SafetyGate,
-  ) {}
+  ) {
+    this.registry = registry
+  }
 
   async execute(call: ToolCall): Promise<ToolResult> {
     // 1. Look up tool

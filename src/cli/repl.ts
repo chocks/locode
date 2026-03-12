@@ -42,18 +42,19 @@ function askQuestion(rl: readline.Interface, question: string): Promise<string> 
   return new Promise(resolve => rl.question(question, resolve))
 }
 
-export async function startRepl(config: Config, options?: { claudeOnly?: boolean; localOnly?: boolean }): Promise<void> {
+export async function startRepl(config: Config, options?: { claudeOnly?: boolean; localOnly?: boolean; verbose?: boolean }): Promise<void> {
   const orch = new Orchestrator(config, undefined, undefined, options)
   await orch.initMcp()
   if (orch.isLocalOnly()) {
-    console.log('[local-only mode] All tasks routed to local LLM\n')
+    console.log(`[local-only mode] Using ${config.local_llm.model}\n`)
   }
   if (orch.isClaudeOnly()) {
-    console.log('[claude-only mode] All tasks routed to Claude\n')
+    console.log(`[claude-only mode] Using ${config.claude.model}\n`)
   }
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
   const mode: PromptMode = orch.isLocalOnly() ? 'local' : orch.isClaudeOnly() ? 'claude' : 'hybrid'
+  const promptModel = orch.isLocalOnly() ? config.local_llm.model : orch.isClaudeOnly() ? config.claude.model : undefined
 
   console.log('locode — local-first AI coding CLI')
   console.log('Type your task, or "stats" for token usage, "exit" to quit.\n')
@@ -65,7 +66,7 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
   const showPrompt = () => {
     if (buffer.length === 0) {
       console.log(formatSeparator())
-      process.stdout.write(formatPrompt(mode))
+      process.stdout.write(formatPrompt(mode, promptModel))
     } else {
       process.stdout.write(formatContinuation())
     }
@@ -205,7 +206,8 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
         }
       }
 
-      printResult(result.content, result.agent, result.routeMethod, result.reason)
+      const resultModel = result.agent === 'local' ? config.local_llm.model : config.claude.model
+      printResult(result.content, result.agent, result.routeMethod, result.reason, resultModel)
       lastSummary = result.summary
     } catch (err) {
       console.error(`Error: ${(err as Error).message}`)

@@ -60,6 +60,14 @@ export class ToolRegistry {
     }))
   }
 
+  describeForPrompt(): string {
+    return this.list().map(tool => {
+      const props = tool.inputSchema.properties as Record<string, unknown> | undefined
+      const params = props ? Object.keys(props).join(', ') : ''
+      return `${tool.name}(${params})\n  ${tool.description}`
+    }).join('\n\n')
+  }
+
   validate(name: string, args: Record<string, unknown>): ValidationResult {
     const tool = this.tools.get(name)
     if (!tool) {

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Ollama from 'ollama'
 import { LocalAgent } from './local'
+import { ToolRegistry } from '../tools/registry'
+import type { ToolExecutor } from '../tools/executor'
 
 // Mock ollama to avoid requiring a running instance in tests
 vi.mock('ollama', () => ({
@@ -12,6 +14,36 @@ vi.mock('ollama', () => ({
     }),
   },
 }))
+
+function makeMockExecutor(): ToolExecutor {
+  const registry = new ToolRegistry()
+  registry.register({
+    name: 'run_command',
+    description: 'Run a shell command',
+    inputSchema: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
+    handler: async () => ({ success: true, output: 'shell output' }),
+    category: 'shell',
+  })
+  registry.register({
+    name: 'read_file',
+    description: 'Read a file',
+    inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+    handler: async () => ({ success: true, output: 'file contents' }),
+    category: 'read',
+  })
+  registry.register({
+    name: 'git_query',
+    description: 'Run a git command',
+    inputSchema: { type: 'object', properties: { args: { type: 'string' } }, required: ['args'] },
+    handler: async () => ({ success: true, output: 'git output' }),
+    category: 'git',
+  })
+  return {
+    registry,
+    execute: vi.fn().mockResolvedValue({ success: true, output: 'mock output' }),
+    executeParallel: vi.fn().mockResolvedValue([]),
+  } as unknown as ToolExecutor
+}
 
 describe('LocalAgent', () => {
   const config = {
@@ -28,7 +60,7 @@ describe('LocalAgent', () => {
   })
 
   it('returns a response and token counts', async () => {
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     const result = await agent.run('What is 6 times 7?')
     expect(result.content).toContain('42')
     expect(result.inputTokens).toBe(50)
@@ -36,7 +68,7 @@ describe('LocalAgent', () => {
   })
 
   it('produces a summary for handoff', async () => {
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     const result = await agent.run('explore the repo structure')
     expect(result.summary).toBeDefined()
     expect(typeof result.summary).toBe('string')
@@ -47,7 +79,7 @@ describe('LocalAgent', () => {
       local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' },
       context: { handoff: 'summary' as const, max_summary_tokens: 10 },
     }
-    const agent = new LocalAgent(configWithSmallSummary)
+    const agent = new LocalAgent(configWithSmallSummary, makeMockExecutor())
     const result = await agent.run('explore the repo')
     expect(result.summary.length).toBeLessThanOrEqual(10)
   })
@@ -70,10 +102,72 @@ describe('LocalAgent', () => {
         eval_count: 8,
       } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
 
-    const agent = new LocalAgent({ local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' } })
+    const agent = new LocalAgent({ local_llm: { provider: 'ollama' as const, model: 'qwen3:8b', base_url: 'http://localhost:11434' } }, makeMockExecutor())
     const result = await agent.run('what does echo hello output?')
     expect(result.content).toContain('hello')
     expect(mockChat).toHaveBeenCalledTimes(2)
+  })
+
+  it('forces a final response when model returns empty after tool use', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    // Round 0: tool call succeeds, Round 1: empty content with no tool calls
+    // Round 2 (retry without tools): model produces actual answer
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          content: '',
+          tool_calls: [{ function: { name: 'read_file', arguments: { path: 'README.md' } } }],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: '', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 3,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'The README starts with # Locode', tool_calls: [] },
+        prompt_eval_count: 50,
+        eval_count: 10,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const agent = new LocalAgent(config, makeMockExecutor())
+    const result = await agent.run('show readme')
+
+    expect(result.content).toContain('Locode')
+    expect(mockChat).toHaveBeenCalledTimes(3)
+  })
+
+  it('breaks out of loop when same tool call fails repeatedly', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    const treeResponse = {
+      message: {
+        content: '',
+        tool_calls: [{ function: { name: 'run_command', arguments: { command: 'tree' } } }],
+      },
+      prompt_eval_count: 30,
+      eval_count: 5,
+    } as unknown as Awaited<ReturnType<typeof Ollama.chat>>
+    // Two rounds of the same failing call, then fallback without tools
+    mockChat
+      .mockResolvedValueOnce(treeResponse)
+      .mockResolvedValueOnce(treeResponse)
+      .mockResolvedValueOnce({
+        message: { content: 'Here are the files.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const executor = makeMockExecutor()
+    vi.mocked(executor.execute).mockResolvedValue({ success: false, output: '', error: 'Error: spawnSync tree ENOENT' })
+    const agent = new LocalAgent(config, executor)
+    const result = await agent.run('show files')
+
+    // Should stop after 2 identical failures, not retry more
+    const executeCalls = vi.mocked(executor.execute).mock.calls
+    expect(executeCalls.length).toBe(2)
+    expect(result.content).toContain('files')
   })
 
   it('includes tool_calls in assistant message history', async () => {
@@ -95,7 +189,7 @@ describe('LocalAgent', () => {
         eval_count: 8,
       } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
 
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     await agent.run('list files')
 
     // Second call should have assistant message WITH tool_calls in history
@@ -105,6 +199,115 @@ describe('LocalAgent', () => {
     ) as { role: string; content: string; tool_calls?: unknown[] }
     expect(assistantMsg).toBeDefined()
     expect(assistantMsg.tool_calls).toEqual(toolCalls)
+  })
+
+  it('parses text-based <tool_call> when model emits them in content', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    // Model emits tool call as text instead of structured tool_calls
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: '<tool_call>\n{"name": "read_file", "arguments": {"path": "README.md"}}\n</tool_call>',
+          tool_calls: [],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'The README contains project info.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const executor = makeMockExecutor()
+    const agent = new LocalAgent(config, executor)
+    const result = await agent.run('show readme')
+
+    expect(executor.execute).toHaveBeenCalledWith({ tool: 'read_file', args: { path: 'README.md' } })
+    expect(mockChat).toHaveBeenCalledTimes(2)
+    expect(result.content).toContain('README contains')
+  })
+
+  it('parses text-based <tool_call> inside <think> tags', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: '<think>\nI should read the file.\n</think>\n<tool_call>\n{"name": "read_file", "arguments": {"path": "README.md"}}\n</tool_call>',
+          tool_calls: [],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'Here are the first 5 lines.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const executor = makeMockExecutor()
+    const agent = new LocalAgent(config, executor)
+    const result = await agent.run('top 5 lines of readme')
+
+    expect(executor.execute).toHaveBeenCalledWith({ tool: 'read_file', args: { path: 'README.md' } })
+    expect(result.content).toContain('first 5 lines')
+  })
+
+  it('logs tool calls and results to stderr when verbose is enabled', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          content: '',
+          tool_calls: [{ function: { name: 'read_file', arguments: { path: 'README.md' } } }],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'Here is the readme.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const executor = makeMockExecutor()
+    const agent = new LocalAgent(config, executor, { verbose: true })
+    await agent.run('show readme')
+
+    const output = stderrSpy.mock.calls.map(c => c[0]).join('')
+    expect(output).toContain('read_file')
+    expect(output).toContain('README.md')
+    expect(output).toContain('mock output')
+    stderrSpy.mockRestore()
+  })
+
+  it('does not log tool calls when verbose is disabled', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          content: '',
+          tool_calls: [{ function: { name: 'read_file', arguments: { path: 'README.md' } } }],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'Done.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const agent = new LocalAgent(config, makeMockExecutor())
+    await agent.run('show readme')
+
+    const output = stderrSpy.mock.calls.map(c => c[0]).join('')
+    expect(output).not.toContain('read_file')
+    stderrSpy.mockRestore()
   })
 
   it('treats malformed tool_calls as no tool calls', async () => {
@@ -120,7 +323,7 @@ describe('LocalAgent', () => {
       eval_count: 10,
     } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
 
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     const result = await agent.run('hello')
 
     // Should return the response directly, not crash or loop
@@ -140,7 +343,7 @@ describe('LocalAgent', () => {
       eval_count: 20,
     } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
 
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     const result = await agent.run('hello')
 
     expect(result.content).not.toContain('</think>')
@@ -160,10 +363,29 @@ describe('LocalAgent', () => {
       eval_count: 15,
     } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
 
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     const result = await agent.run('hello')
 
     expect(result.content).toBe('Hi there!')
+  })
+
+  it('returns think content when stripping tags leaves empty response', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    mockChat.mockResolvedValueOnce({
+      message: {
+        role: 'assistant',
+        content: '<think>\nThe README has these lines:\n1. # Locode\n2. A CLI tool\n</think>',
+        tool_calls: [],
+      },
+      prompt_eval_count: 50,
+      eval_count: 15,
+    } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const agent = new LocalAgent(config, makeMockExecutor())
+    const result = await agent.run('show readme')
+
+    expect(result.content).not.toContain('<think>')
+    expect(result.content).toContain('README has these lines')
   })
 
   it('passes options to Ollama.chat when configured', async () => {
@@ -175,7 +397,7 @@ describe('LocalAgent', () => {
         options: { num_ctx: 1024, num_thread: 4 },
       },
     }
-    const agent = new LocalAgent(configWithOptions)
+    const agent = new LocalAgent(configWithOptions, makeMockExecutor())
     await agent.run('hello')
 
     const chatCall = vi.mocked(Ollama.chat).mock.calls[0][0]
@@ -183,7 +405,7 @@ describe('LocalAgent', () => {
   })
 
   it('omits options from Ollama.chat when not configured', async () => {
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     await agent.run('hello')
 
     const chatCall = vi.mocked(Ollama.chat).mock.calls[0][0]
@@ -196,7 +418,7 @@ describe('LocalAgent', () => {
     fetchError.cause = { code: 'ECONNREFUSED' }
     mockChat.mockRejectedValue(fetchError)
 
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     await expect(agent.run('hello')).rejects.toThrow(/[Oo]llama/)
     await expect(agent.run('hello')).rejects.toThrow(/running/)
   })
@@ -205,18 +427,18 @@ describe('LocalAgent', () => {
     const mockChat = vi.mocked(Ollama.chat)
     mockChat.mockRejectedValueOnce(new Error('model not found'))
 
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     await expect(agent.run('hello')).rejects.toThrow('model not found')
   })
 
   it('includes repo context in system prompt when provided', async () => {
-    const agent = new LocalAgent(config)
+    const agent = new LocalAgent(config, makeMockExecutor())
     await agent.run('hello', undefined, '--- CLAUDE.md ---\n# My Project')
 
     const chatCall = vi.mocked(Ollama.chat).mock.calls[0][0]
     const systemMsg = chatCall.messages[0]
     expect(systemMsg.role).toBe('system')
     expect((systemMsg as { content: string }).content).toContain('# My Project')
-    expect((systemMsg as { content: string }).content).toContain('You are a local coding assistant')
+    expect((systemMsg as { content: string }).content).toContain('You are a coding assistant')
   })
 })

@@ -1,13 +1,13 @@
 local_llm:
   provider: ollama
-  model: qwen3:8b
+  model: llama3.1:8b
   base_url: http://localhost:11434
   # Ollama per-request options (passed directly to the Ollama API).
   # num_ctx:    context window size in tokens (lower = faster, uses less RAM)
   # num_thread: number of CPU threads for inference (match your core count)
   # See https://github.com/ollama/ollama/blob/main/docs/modelfile.md#valid-parameters
   options:
-    num_ctx: 2048
+    num_ctx: 4096
     num_thread: 4
 
 claude:
