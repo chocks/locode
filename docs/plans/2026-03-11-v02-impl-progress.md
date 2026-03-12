@@ -12,7 +12,7 @@
 |---|--------|-------|--------|
 | 1 | `feat/v02-tool-registry` | `ToolRegistry` + `ToolDefinition` + `ToolResult` interfaces | ✅ Done |
 | 2 | `feat/v02-tool-definitions` | Migrate existing tools to `definitions/` format | ✅ Done |
-| 3 | — | `SafetyGate` + config schema additions | ⬜ Not started |
+| 3 | `feat/v02-safety-gate` | `SafetyGate` + config schema additions | ✅ Done |
 | 4 | — | `ToolExecutor` (ties registry + safety) | ⬜ Not started |
 | 5 | — | Wire into `LocalAgent` + `Orchestrator` | ⬜ Not started |
 | 6 | — | New tools (`search_code`, `list_files`) | ⬜ Not started |
@@ -55,3 +55,18 @@
 - Write tools (`write_file`, `edit_file`) have `requiresConfirmation: true`
 - Original tool files kept — removed when agents switch to registry (PR 5)
 - `createDefaultRegistry()` registers all 5 built-in tools
+
+## PR 3: SafetyGate + Config Schema
+
+**Files:**
+- `src/tools/safety-gate.ts` — `SafetyGate` class, `SafetyConfig`, `SafetyDecision` interfaces
+- `src/tools/safety-gate.test.ts` — 8 unit tests
+- `src/config/schema.ts` — added `safety` section with defaults
+- `src/config/schema.test.ts` — 2 new tests for safety config defaults
+
+**Behavior:**
+- `check(call)` — decides if a tool call needs confirmation based on `auto_approve`/`always_confirm` lists
+- `checkWritePath(path)` — validates file write targets against `allowed_write_paths`
+- `always_confirm` takes precedence over `auto_approve`
+- `"."` in `allowed_write_paths` means project root (cwd)
+- Config defaults to sensible values — read tools auto-approved, write paths restricted to project
