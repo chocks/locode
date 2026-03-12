@@ -106,4 +106,24 @@ describe('ConfigSchema', () => {
     const result = ConfigSchema.parse(baseConfig)
     expect(result.context.repo_context_files).toEqual(['CLAUDE.md'])
   })
+
+  it('defaults safety config when omitted', () => {
+    const result = ConfigSchema.parse(baseConfig)
+    expect(result.safety.always_confirm).toEqual([])
+    expect(result.safety.auto_approve).toEqual(['read_file', 'search_code', 'list_files', 'git_query'])
+    expect(result.safety.allowed_write_paths).toEqual(['.'])
+  })
+
+  it('accepts custom safety config', () => {
+    const result = ConfigSchema.parse({
+      ...baseConfig,
+      safety: {
+        always_confirm: ['write_file'],
+        auto_approve: ['read_file'],
+        allowed_write_paths: ['src', 'tests'],
+      },
+    })
+    expect(result.safety.always_confirm).toEqual(['write_file'])
+    expect(result.safety.allowed_write_paths).toEqual(['src', 'tests'])
+  })
 })
