@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { AgentResult } from './local'
 import { readFileTool, shellTool, gitTool, writeFileTool, editFileTool } from '../tools'
+import type { ToolExecutor } from '../tools/executor'
 
 interface ClaudeConfig {
   claude: { model: string; token_threshold: number }
@@ -174,10 +175,12 @@ SUMMARY: (2-3 sentences describing what was done.)`
 export class ClaudeAgent {
   private client: Anthropic
   private config: ClaudeConfig
+  private toolExecutor: ToolExecutor | null
 
-  constructor(config: ClaudeConfig) {
+  constructor(config: ClaudeConfig, toolExecutor?: ToolExecutor) {
     this.config = config
     this.client = new Anthropic()
+    this.toolExecutor = toolExecutor ?? null
   }
 
   async run(prompt: string, context?: string, repoContext?: string): Promise<ClaudeAgentResult> {
@@ -203,11 +206,14 @@ export class ClaudeAgent {
       let data: Anthropic.Message
       let httpResponse: { headers: { get(name: string): string | null } }
       try {
+        const tools = this.toolExecutor
+          ? this.toolExecutor.registry.listForClaude() as Anthropic.Tool[]
+          : TOOLS
         const result = await this.client.messages.create({
           model: this.config.claude.model,
           max_tokens: 16384,
           system: systemPrompt,
-          tools: TOOLS,
+          tools,
           messages,
         }).withResponse()
         data = result.data
@@ -235,7 +241,13 @@ export class ClaudeAgent {
       messages.push({ role: 'assistant', content: data.content })
       const toolResults: Anthropic.ToolResultBlockParam[] = []
       for (const tc of toolBlocks) {
-        const output = await dispatchTool(tc.name, tc.input)
+        let output: string
+        if (this.toolExecutor) {
+          const toolResult = await this.toolExecutor.execute({ tool: tc.name, args: tc.input })
+          output = toolResult.success ? toolResult.output : `Error: ${toolResult.error}`
+        } else {
+          output = await dispatchTool(tc.name, tc.input)
+        }
         toolResults.push({ type: 'tool_result', tool_use_id: tc.id, content: output })
       }
       messages.push({ role: 'user', content: toolResults })

@@ -1,6 +1,7 @@
 import Ollama from 'ollama'
 import { readFileTool, shellTool, gitTool } from '../tools'
 import type { McpManager, McpTool } from '../mcp/client'
+import type { ToolExecutor } from '../tools/executor'
 
 interface LocalConfig {
   local_llm: { provider: 'ollama'; model: string; base_url: string; options?: Record<string, number> }
@@ -141,10 +142,12 @@ export class LocalAgent {
   private config: LocalConfig
   private mcpManager: McpManager | null
   private mcpToolNames: Set<string> = new Set()
+  private toolExecutor: ToolExecutor | null
 
-  constructor(config: LocalConfig, mcpManager?: McpManager) {
+  constructor(config: LocalConfig, mcpManager?: McpManager, toolExecutor?: ToolExecutor) {
     this.config = config
     this.mcpManager = mcpManager ?? null
+    this.toolExecutor = toolExecutor ?? null
   }
 
   async run(prompt: string, context?: string, repoContext?: string): Promise<AgentResult> {
@@ -163,12 +166,17 @@ export class LocalAgent {
     let totalOutputTokens = 0
     const MAX_TOOL_ROUNDS = 5  // prevent infinite loops
 
-    // Merge built-in tools with MCP tools
-    const allTools = [...TOOLS] as Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }>
-    if (this.mcpManager) {
-      const mcpTools = this.mcpManager.getTools()
-      allTools.push(...mcpToolsToOllama(mcpTools))
-      this.mcpToolNames = new Set(mcpTools.map(t => t.name))
+    // Build tool schemas — use registry when executor is present, else legacy inline
+    let allTools: Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }>
+    if (this.toolExecutor) {
+      allTools = this.toolExecutor.registry.listForLLM()
+    } else {
+      allTools = [...TOOLS] as Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }>
+      if (this.mcpManager) {
+        const mcpTools = this.mcpManager.getTools()
+        allTools.push(...mcpToolsToOllama(mcpTools))
+        this.mcpToolNames = new Set(mcpTools.map(t => t.name))
+      }
     }
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -210,9 +218,15 @@ export class LocalAgent {
       for (const tc of toolCalls) {
         const name = tc.function.name
         const args = tc.function.arguments as Record<string, string>
-        const result = (this.mcpManager && this.mcpToolNames.has(name))
-          ? await this.mcpManager.callTool(name, args)
-          : await dispatchTool(name, args)
+        let result: string
+        if (this.toolExecutor) {
+          const toolResult = await this.toolExecutor.execute({ tool: name, args })
+          result = toolResult.success ? toolResult.output : `Error: ${toolResult.error}`
+        } else if (this.mcpManager && this.mcpToolNames.has(name)) {
+          result = await this.mcpManager.callTool(name, args)
+        } else {
+          result = await dispatchTool(name, args)
+        }
         messages.push({ role: 'tool', content: result })
       }
     }
