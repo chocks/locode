@@ -42,7 +42,7 @@ function askQuestion(rl: readline.Interface, question: string): Promise<string> 
   return new Promise(resolve => rl.question(question, resolve))
 }
 
-export async function startRepl(config: Config, options?: { claudeOnly?: boolean; localOnly?: boolean }): Promise<void> {
+export async function startRepl(config: Config, options?: { claudeOnly?: boolean; localOnly?: boolean; verbose?: boolean }): Promise<void> {
   const orch = new Orchestrator(config, undefined, undefined, options)
   await orch.initMcp()
   if (orch.isLocalOnly()) {

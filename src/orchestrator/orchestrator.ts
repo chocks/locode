@@ -23,6 +23,7 @@ export interface OrchestratorResult extends AgentResult {
 interface OrchestratorOptions {
   localOnly?: boolean
   claudeOnly?: boolean
+  verbose?: boolean
 }
 
 export class Orchestrator {
@@ -33,6 +34,7 @@ export class Orchestrator {
   private config: Config
   private localOnly: boolean
   private claudeOnly: boolean
+  private verbose: boolean
   private localFallback: boolean = false
   private fallbackSummary: string = ''
   private resetsAt: number = 0
@@ -47,11 +49,12 @@ export class Orchestrator {
     const registry = createDefaultRegistry()
     const safetyGate = new SafetyGate(config.safety)
     this.toolExecutor = new ToolExecutor(registry, safetyGate)
-    this.localAgent = localAgent ?? new LocalAgent(config, this.toolExecutor)
+    this.localAgent = localAgent ?? new LocalAgent(config, this.toolExecutor, { verbose: options?.verbose })
     this.claudeAgent = claudeAgent ?? new ClaudeAgent(config, this.toolExecutor)
     this.tracker = new TokenTracker(config.token_tracking)
     this.claudeOnly = options?.claudeOnly ?? false
     this.localOnly = options?.localOnly ?? (!process.env.ANTHROPIC_API_KEY)
+    this.verbose = options?.verbose ?? false
     this.repoContext = loadRepoContext(config.context.repo_context_files, config.context.max_file_bytes)
   }
 
@@ -75,7 +78,7 @@ export class Orchestrator {
       })
     }
     // Rebuild local agent with updated registry (MCP tools now included)
-    this.localAgent = new LocalAgent(this.config, this.toolExecutor)
+    this.localAgent = new LocalAgent(this.config, this.toolExecutor, { verbose: this.verbose })
   }
 
   async shutdown(): Promise<void> {

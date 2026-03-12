@@ -30,10 +30,11 @@ program
   .option('-c, --config <path>', 'path to locode.yaml', getDefaultConfigPath())
   .option('--claude-only', 'route all tasks to Claude')
   .option('--local-only', 'route all tasks to local LLM')
+  .option('--verbose', 'show tool calls and model responses')
   .action(async (opts) => {
     const config = loadConfig(path.resolve(opts.config))
     preflight(config.local_llm.base_url)
-    await startRepl(config, { claudeOnly: opts.claudeOnly, localOnly: opts.localOnly })
+    await startRepl(config, { claudeOnly: opts.claudeOnly, localOnly: opts.localOnly, verbose: opts.verbose })
   })
 
 program
@@ -42,10 +43,11 @@ program
   .option('-c, --config <path>', 'path to locode.yaml', getDefaultConfigPath())
   .option('--claude-only', 'route all tasks to Claude')
   .option('--local-only', 'route all tasks to local LLM')
+  .option('--verbose', 'show tool calls and model responses')
   .action(async (prompt, opts) => {
     const config = loadConfig(path.resolve(opts.config))
     preflight(config.local_llm.base_url)
-    const orch = new Orchestrator(config, undefined, undefined, { claudeOnly: opts.claudeOnly, localOnly: opts.localOnly })
+    const orch = new Orchestrator(config, undefined, undefined, { claudeOnly: opts.claudeOnly, localOnly: opts.localOnly, verbose: opts.verbose })
     await orch.initMcp()
     if (orch.isLocalOnly()) console.error('[local-only mode] Using local LLM')
     if (orch.isClaudeOnly()) console.error('[claude-only mode] Using Claude')

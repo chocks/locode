@@ -80,13 +80,19 @@ function isOllamaConnectionError(err: unknown): boolean {
   return false
 }
 
+export interface LocalAgentOptions {
+  verbose?: boolean
+}
+
 export class LocalAgent {
   private config: LocalConfig
   private toolExecutor: ToolExecutor
+  private verbose: boolean
 
-  constructor(config: LocalConfig, toolExecutor: ToolExecutor) {
+  constructor(config: LocalConfig, toolExecutor: ToolExecutor, options?: LocalAgentOptions) {
     this.config = config
     this.toolExecutor = toolExecutor
+    this.verbose = options?.verbose ?? false
   }
 
   async run(prompt: string, context?: string, repoContext?: string): Promise<AgentResult> {
@@ -132,12 +138,23 @@ export class LocalAgent {
       totalInputTokens += response.prompt_eval_count ?? 0
       totalOutputTokens += response.eval_count ?? 0
 
+      if (this.verbose) {
+        const contentPreview = response.message.content?.slice(0, 300) || '(empty)'
+        const rawCalls = (response.message as { tool_calls?: unknown[] }).tool_calls
+        process.stderr.write(`[model] round=${round} content=${JSON.stringify(contentPreview)} tool_calls=${JSON.stringify(rawCalls ?? [])}\n`)
+      }
+
       const rawToolCalls = (response.message as { content: string; tool_calls?: Array<{ function: { name: string; arguments: Record<string, string> } }> }).tool_calls
       const structuredCalls = rawToolCalls?.filter(tc => tc?.function?.name)
       // Fall back to parsing <tool_call> blocks from content
+      const textCalls = parseTextToolCalls(response.message.content)
       const toolCalls = (structuredCalls && structuredCalls.length > 0)
         ? structuredCalls
-        : parseTextToolCalls(response.message.content)
+        : textCalls
+
+      if (this.verbose && !structuredCalls?.length && textCalls) {
+        process.stderr.write(`[fallback] parsed ${textCalls.length} text-based <tool_call> from content\n`)
+      }
 
       // No tool calls — final response
       if (!toolCalls || toolCalls.length === 0) {
@@ -152,8 +169,15 @@ export class LocalAgent {
       for (const tc of toolCalls) {
         const name = tc.function.name
         const args = tc.function.arguments as Record<string, string>
+        if (this.verbose) {
+          process.stderr.write(`[tool] ${name}(${JSON.stringify(args)})\n`)
+        }
         const toolResult = await this.toolExecutor.execute({ tool: name, args })
         const result = toolResult.success ? toolResult.output : `Error: ${toolResult.error}`
+        if (this.verbose) {
+          const preview = result.length > 200 ? result.slice(0, 200) + '...' : result
+          process.stderr.write(`[result] ${preview}\n`)
+        }
         messages.push({ role: 'tool', content: result })
       }
     }

@@ -193,6 +193,61 @@ describe('LocalAgent', () => {
     expect(result.content).toContain('first 5 lines')
   })
 
+  it('logs tool calls and results to stderr when verbose is enabled', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          content: '',
+          tool_calls: [{ function: { name: 'read_file', arguments: { path: 'README.md' } } }],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'Here is the readme.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const executor = makeMockExecutor()
+    const agent = new LocalAgent(config, executor, { verbose: true })
+    await agent.run('show readme')
+
+    const output = stderrSpy.mock.calls.map(c => c[0]).join('')
+    expect(output).toContain('read_file')
+    expect(output).toContain('README.md')
+    expect(output).toContain('mock output')
+    stderrSpy.mockRestore()
+  })
+
+  it('does not log tool calls when verbose is disabled', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          content: '',
+          tool_calls: [{ function: { name: 'read_file', arguments: { path: 'README.md' } } }],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'Done.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const agent = new LocalAgent(config, makeMockExecutor())
+    await agent.run('show readme')
+
+    const output = stderrSpy.mock.calls.map(c => c[0]).join('')
+    expect(output).not.toContain('read_file')
+    stderrSpy.mockRestore()
+  })
+
   it('treats malformed tool_calls as no tool calls', async () => {
     const mockChat = vi.mocked(Ollama.chat)
     // Model returns tool_calls with null/undefined entries
