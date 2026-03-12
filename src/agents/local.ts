@@ -23,16 +23,11 @@ TOOLS
 const LOCAL_PROMPT_FOOTER = `
 
 INSTRUCTIONS
-1. Call a tool to get the information you need.
-2. When you receive the tool result, write your answer immediately.
-3. Do NOT call another tool unless the first result was insufficient.
-4. Base your answer ONLY on tool results. Never guess file contents.
-5. You cannot modify files. Only read and explore.
-
-RESPONSE FORMAT
-After receiving tool results, respond with:
-ANSWER: <your answer based on the tool output>
-SUMMARY: <2-3 sentences>`
+1. Use the tools above to gather information. Do not guess file contents.
+2. After receiving a tool result, respond with your answer in plain text.
+3. Only call another tool if the first result was insufficient.
+4. You cannot modify files. Only read and explore.
+5. Keep answers concise.`
 
 // Strip <think>...</think> blocks that thinking-mode models (e.g. qwen3) may emit.
 // If stripping leaves nothing, return the content inside the tags instead.
@@ -113,7 +108,7 @@ export class LocalAgent {
           model: this.config.local_llm.model,
           messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
           tools: allTools as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
-          think: false,
+
           ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
         })
       } catch (err) {
