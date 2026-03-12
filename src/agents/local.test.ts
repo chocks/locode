@@ -198,6 +198,25 @@ describe('LocalAgent', () => {
     expect(result.content).toBe('Hi there!')
   })
 
+  it('returns think content when stripping tags leaves empty response', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    mockChat.mockResolvedValueOnce({
+      message: {
+        role: 'assistant',
+        content: '<think>\nThe README has these lines:\n1. # Locode\n2. A CLI tool\n</think>',
+        tool_calls: [],
+      },
+      prompt_eval_count: 50,
+      eval_count: 15,
+    } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const agent = new LocalAgent(config, makeMockExecutor())
+    const result = await agent.run('show readme')
+
+    expect(result.content).not.toContain('<think>')
+    expect(result.content).toContain('README has these lines')
+  })
+
   it('passes options to Ollama.chat when configured', async () => {
     const configWithOptions = {
       local_llm: {

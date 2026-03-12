@@ -45,9 +45,14 @@ RULES
 End every response with:
 SUMMARY: (2-3 sentences describing what you found.)`
 
-// Strip <think>...</think> blocks that thinking-mode models (e.g. qwen3) may emit
+// Strip <think>...</think> blocks that thinking-mode models (e.g. qwen3) may emit.
+// If stripping leaves nothing, return the content inside the tags instead.
 function stripThinkTags(text: string): string {
-  return text.replace(/^[\s\S]*?<\/think>\s*/m, '').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim()
+  const stripped = text.replace(/^[\s\S]*?<\/think>\s*/m, '').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim()
+  if (stripped) return stripped
+  // Fallback: extract content from inside think tags
+  const inner = text.replace(/<\/?think>/g, '').trim()
+  return inner || text.trim()
 }
 
 function isOllamaConnectionError(err: unknown): boolean {
