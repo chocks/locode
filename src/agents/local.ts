@@ -14,11 +14,15 @@ export interface AgentResult {
 }
 
 // Static parts of the system prompt — tool list is injected dynamically
-const LOCAL_PROMPT_HEADER = `You are a coding assistant. Use the provided tools to answer questions.
+function buildPromptHeader(): string {
+  return `You are a coding assistant. Use the provided tools to answer questions.
+You are working in: ${process.cwd()}
+Always use relative paths (e.g. README.md, src/index.ts). Never use /path/to or placeholder paths.
 
 TOOLS
 
 `
+}
 
 const LOCAL_PROMPT_FOOTER = `
 
@@ -81,7 +85,7 @@ export class LocalAgent {
 
   async run(prompt: string, context?: string, repoContext?: string): Promise<AgentResult> {
     const toolList = this.toolExecutor.registry.describeForPrompt()
-    const basePrompt = LOCAL_PROMPT_HEADER + toolList + LOCAL_PROMPT_FOOTER
+    const basePrompt = buildPromptHeader() + toolList + LOCAL_PROMPT_FOOTER
     const systemPrompt = repoContext
       ? `Project context:\n${repoContext}\n\n${basePrompt}`
       : basePrompt
