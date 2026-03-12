@@ -15,35 +15,30 @@ export interface AgentResult {
   outputTokens: number
 }
 
-const SYSTEM_PROMPT = `You are a local coding assistant with tool access.
+// Static parts of the system prompt — tool list is injected dynamically
+const LOCAL_PROMPT_HEADER = `You are a local coding assistant with tool access.
 
 You MUST use the provided tools to fulfill requests.
 Never say you cannot access files, run commands, or query git.
 
 AVAILABLE TOOLS
 
-read_file(path)
-  Read a file from the repository.
+`
 
-run_command(command)
-  Run read-only shell commands such as ls, cat, grep, find, tree.
-  Only read-only commands are permitted; others are blocked.
-
-git_query(args)
-  Run git inspection commands such as log, diff, status, blame.
+const LOCAL_PROMPT_FOOTER = `
 
 WORKFLOW
 
-1. Explore the repository using run_command (ls, tree, grep).
+1. Explore the repository using shell commands (ls, tree, grep).
 2. Identify relevant files.
 3. Read files using read_file.
-4. Use git_query if history or changes are relevant.
+4. Use git queries if history or changes are relevant.
 5. Answer the user's question based on the gathered information.
 
 SEARCH GUIDELINES
 
 Before reading files:
-- Prefer searching the repository using grep or find via run_command.
+- Prefer searching the repository using grep or find.
 - Identify the correct file before opening it.
 - Read only the files necessary to answer the question.
 
@@ -59,6 +54,16 @@ Keep explanations concise. Focus on tool usage and findings.
 
 End every response with:
 SUMMARY: (2-3 sentences describing what you found.)`
+
+// Legacy static prompt for when no executor is present
+const LEGACY_TOOL_LIST = `read_file(path)
+  Read the contents of a file
+
+shell(command)
+  Run a read-only shell command (ls, grep, find, cat, etc.)
+
+git(args)
+  Run a read-only git command (log, diff, status, blame, etc.)`
 
 // Tool schemas for Ollama function calling
 const TOOLS = [
@@ -151,9 +156,13 @@ export class LocalAgent {
   }
 
   async run(prompt: string, context?: string, repoContext?: string): Promise<AgentResult> {
+    const toolList = this.toolExecutor
+      ? this.toolExecutor.registry.describeForPrompt()
+      : LEGACY_TOOL_LIST
+    const basePrompt = LOCAL_PROMPT_HEADER + toolList + LOCAL_PROMPT_FOOTER
     const systemPrompt = repoContext
-      ? `Project context:\n${repoContext}\n\n${SYSTEM_PROMPT}`
-      : SYSTEM_PROMPT
+      ? `Project context:\n${repoContext}\n\n${basePrompt}`
+      : basePrompt
     const messages: Array<{ role: string; content: string }> = []
 
     if (context) {
