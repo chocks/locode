@@ -68,13 +68,15 @@ AVAILABLE TOOLS
 
 const CLAUDE_PROMPT_FOOTER = `
 
+CRITICAL: You MUST call a tool before answering ANY question about files, code, or the repository. NEVER guess or assume file contents.
+
 WORKFLOW
 
-1. Explore — Use shell commands, git queries, or read_file to understand the repository structure and find relevant code.
-2. Understand — Read the relevant files and search for references before proposing changes.
+1. Explore — Use run_command (ls, find, grep) or read_file to understand the repository.
+2. Understand — Use read_file to inspect relevant files before proposing changes.
 3. Plan — Briefly describe what needs to change and why.
-4. Modify — Apply the smallest possible change that fixes the issue.
-5. Verify — Re-read the file after editing to confirm the change was applied correctly.
+4. Modify — Use edit_file for targeted changes, write_file only for new files.
+5. Verify — Use read_file after editing to confirm the change was applied correctly.
 
 EDITING RULES
 
