@@ -10,6 +10,7 @@ import { runUpdate } from './cli/update'
 import { runSetup, loadEnvFile } from './cli/setup'
 import { runBenchmark, resolvePrompts } from './cli/benchmark'
 import { createSpinner } from './cli/spinner'
+import { preflight } from './cli/preflight'
 import path from 'path'
 import pkgJson from '../package.json'
 const { version } = pkgJson
@@ -31,6 +32,7 @@ program
   .option('--local-only', 'route all tasks to local LLM')
   .action(async (opts) => {
     const config = loadConfig(path.resolve(opts.config))
+    preflight(config.local_llm.base_url)
     await startRepl(config, { claudeOnly: opts.claudeOnly, localOnly: opts.localOnly })
   })
 
@@ -42,6 +44,7 @@ program
   .option('--local-only', 'route all tasks to local LLM')
   .action(async (prompt, opts) => {
     const config = loadConfig(path.resolve(opts.config))
+    preflight(config.local_llm.base_url)
     const orch = new Orchestrator(config, undefined, undefined, { claudeOnly: opts.claudeOnly, localOnly: opts.localOnly })
     await orch.initMcp()
     if (orch.isLocalOnly()) console.error('[local-only mode] Using local LLM')
