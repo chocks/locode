@@ -135,10 +135,10 @@ AVAILABLE TOOLS
 read_file(path)
   Read a file from the repository.
 
-shell(command)
+run_command(command)
   Run read-only shell commands (ls, cat, grep, find, etc.). Only read-only commands are permitted; others are blocked.
 
-git(args)
+git_query(args)
   Run git queries such as log, diff, status, and blame.
 
 edit_file(path, old_string, new_string)
@@ -150,7 +150,7 @@ write_file(path, content)
 
 WORKFLOW
 
-1. Explore — Use shell, git, or read_file to understand the repository structure and find relevant code.
+1. Explore — Use run_command, git_query, or read_file to understand the repository structure and find relevant code.
 2. Understand — Read the relevant files and search for references before proposing changes.
 3. Plan — Briefly describe what needs to change and why.
 4. Modify — Apply the smallest possible change that fixes the issue.

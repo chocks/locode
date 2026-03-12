@@ -25,25 +25,25 @@ AVAILABLE TOOLS
 read_file(path)
   Read a file from the repository.
 
-shell(command)
+run_command(command)
   Run read-only shell commands such as ls, cat, grep, find, tree.
   Only read-only commands are permitted; others are blocked.
 
-git(args)
+git_query(args)
   Run git inspection commands such as log, diff, status, blame.
 
 WORKFLOW
 
-1. Explore the repository using shell commands (ls, tree, grep).
+1. Explore the repository using run_command (ls, tree, grep).
 2. Identify relevant files.
 3. Read files using read_file.
-4. Use git if history or changes are relevant.
+4. Use git_query if history or changes are relevant.
 5. Answer the user's question based on the gathered information.
 
 SEARCH GUIDELINES
 
 Before reading files:
-- Prefer searching the repository using grep or find.
+- Prefer searching the repository using grep or find via run_command.
 - Identify the correct file before opening it.
 - Read only the files necessary to answer the question.
 
