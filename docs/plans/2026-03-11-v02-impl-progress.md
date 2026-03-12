@@ -13,7 +13,7 @@
 | 1 | `feat/v02-tool-registry` | `ToolRegistry` + `ToolDefinition` + `ToolResult` interfaces | ✅ Done |
 | 2 | `feat/v02-tool-definitions` | Migrate existing tools to `definitions/` format | ✅ Done |
 | 3 | `feat/v02-safety-gate` | `SafetyGate` + config schema additions | ✅ Done |
-| 4 | — | `ToolExecutor` (ties registry + safety) | ⬜ Not started |
+| 4 | `feat/v02-tool-executor` | `ToolExecutor` (ties registry + safety) | ✅ Done |
 | 5 | — | Wire into `LocalAgent` + `Orchestrator` | ⬜ Not started |
 | 6 | — | New tools (`search_code`, `list_files`) | ⬜ Not started |
 
@@ -70,3 +70,15 @@
 - `always_confirm` takes precedence over `auto_approve`
 - `"."` in `allowed_write_paths` means project root (cwd)
 - Config defaults to sensible values — read tools auto-approved, write paths restricted to project
+
+## PR 4: ToolExecutor
+
+**Files:**
+- `src/tools/executor.ts` — `ToolExecutor` class, `ToolCall` interface
+- `src/tools/executor.test.ts` — 7 unit tests
+
+**Behavior:**
+- `execute(call)` — validate args → check safety → run handler → return result
+- `executeParallel(calls)` — runs multiple tool calls concurrently via `Promise.all`
+- Write-category tools have their path checked against `SafetyGate.checkWritePath()`
+- Handler errors are caught and returned as `ToolResult` failures (never throws)
