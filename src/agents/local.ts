@@ -55,6 +55,24 @@ function stripThinkTags(text: string): string {
   return inner || text.trim()
 }
 
+// Parse text-based <tool_call> blocks that some models emit instead of structured tool_calls
+function parseTextToolCalls(content: string): Array<{ function: { name: string; arguments: Record<string, string> } }> | null {
+  const pattern = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/g
+  const calls: Array<{ function: { name: string; arguments: Record<string, string> } }> = []
+  let match
+  while ((match = pattern.exec(content)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1])
+      if (parsed.name && parsed.arguments) {
+        calls.push({ function: { name: parsed.name, arguments: parsed.arguments } })
+      }
+    } catch {
+      // Skip malformed JSON
+    }
+  }
+  return calls.length > 0 ? calls : null
+}
+
 function isOllamaConnectionError(err: unknown): boolean {
   if (err instanceof TypeError && err.message === 'fetch failed') return true
   const cause = (err as { cause?: { code?: string } })?.cause
@@ -115,7 +133,11 @@ export class LocalAgent {
       totalOutputTokens += response.eval_count ?? 0
 
       const rawToolCalls = (response.message as { content: string; tool_calls?: Array<{ function: { name: string; arguments: Record<string, string> } }> }).tool_calls
-      const toolCalls = rawToolCalls?.filter(tc => tc?.function?.name)
+      const structuredCalls = rawToolCalls?.filter(tc => tc?.function?.name)
+      // Fall back to parsing <tool_call> blocks from content
+      const toolCalls = (structuredCalls && structuredCalls.length > 0)
+        ? structuredCalls
+        : parseTextToolCalls(response.message.content)
 
       // No tool calls — final response
       if (!toolCalls || toolCalls.length === 0) {

@@ -139,6 +139,60 @@ describe('LocalAgent', () => {
     expect(assistantMsg.tool_calls).toEqual(toolCalls)
   })
 
+  it('parses text-based <tool_call> when model emits them in content', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    // Model emits tool call as text instead of structured tool_calls
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: '<tool_call>\n{"name": "read_file", "arguments": {"path": "README.md"}}\n</tool_call>',
+          tool_calls: [],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'The README contains project info.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const executor = makeMockExecutor()
+    const agent = new LocalAgent(config, executor)
+    const result = await agent.run('show readme')
+
+    expect(executor.execute).toHaveBeenCalledWith({ tool: 'read_file', args: { path: 'README.md' } })
+    expect(mockChat).toHaveBeenCalledTimes(2)
+    expect(result.content).toContain('README contains')
+  })
+
+  it('parses text-based <tool_call> inside <think> tags', async () => {
+    const mockChat = vi.mocked(Ollama.chat)
+    mockChat
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: '<think>\nI should read the file.\n</think>\n<tool_call>\n{"name": "read_file", "arguments": {"path": "README.md"}}\n</tool_call>',
+          tool_calls: [],
+        },
+        prompt_eval_count: 30,
+        eval_count: 5,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+      .mockResolvedValueOnce({
+        message: { content: 'Here are the first 5 lines.', tool_calls: [] },
+        prompt_eval_count: 40,
+        eval_count: 8,
+      } as unknown as Awaited<ReturnType<typeof Ollama.chat>>)
+
+    const executor = makeMockExecutor()
+    const agent = new LocalAgent(config, executor)
+    const result = await agent.run('top 5 lines of readme')
+
+    expect(executor.execute).toHaveBeenCalledWith({ tool: 'read_file', args: { path: 'README.md' } })
+    expect(result.content).toContain('first 5 lines')
+  })
+
   it('treats malformed tool_calls as no tool calls', async () => {
     const mockChat = vi.mocked(Ollama.chat)
     // Model returns tool_calls with null/undefined entries
