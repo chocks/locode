@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { AgentResult } from './local'
-import { readFileTool, shellTool, gitTool, writeFileTool, editFileTool } from '../tools'
 import type { ToolExecutor } from '../tools/executor'
 
 interface ClaudeConfig {
@@ -58,74 +57,6 @@ function nextMidnightUtc(): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
 }
 
-// Tool schemas in Anthropic format
-// TODO(v0.2): extract shared tool registry (see docs/plans/2026-03-07-locode-v02-architecture-design.md §4.6)
-const TOOLS: Anthropic.Tool[] = [
-  {
-    name: 'read_file',
-    description: 'Read the contents of a file',
-    input_schema: {
-      type: 'object' as const,
-      properties: { path: { type: 'string', description: 'Absolute or relative path to the file' } },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'shell',
-    description: 'Run a read-only shell command (ls, grep, find, cat, etc.)',
-    input_schema: {
-      type: 'object' as const,
-      properties: { command: { type: 'string', description: 'The shell command to run' } },
-      required: ['command'],
-    },
-  },
-  {
-    name: 'git',
-    description: 'Run a read-only git command (log, diff, status, blame, etc.)',
-    input_schema: {
-      type: 'object' as const,
-      properties: { args: { type: 'string', description: 'Git subcommand and arguments, e.g. "log --oneline -10"' } },
-      required: ['args'],
-    },
-  },
-  {
-    name: 'write_file',
-    description: 'Write content to a file, creating it if needed or overwriting if it exists',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        path: { type: 'string', description: 'Path to the file to write' },
-        content: { type: 'string', description: 'The full content to write' },
-      },
-      required: ['path', 'content'],
-    },
-  },
-  {
-    name: 'edit_file',
-    description: 'Edit a file by replacing an exact string match. The old_string must appear exactly once in the file.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        path: { type: 'string', description: 'Path to the file to edit' },
-        old_string: { type: 'string', description: 'The exact string to find (must be unique in file)' },
-        new_string: { type: 'string', description: 'The replacement string' },
-      },
-      required: ['path', 'old_string', 'new_string'],
-    },
-  },
-]
-
-async function dispatchTool(name: string, input: Record<string, string>): Promise<string> {
-  switch (name) {
-    case 'read_file': return readFileTool({ path: input.path })
-    case 'shell':     return shellTool({ command: input.command })
-    case 'git':        return gitTool({ args: input.args })
-    case 'write_file': return writeFileTool({ path: input.path, content: input.content })
-    case 'edit_file':  return editFileTool({ path: input.path, old_string: input.old_string, new_string: input.new_string })
-    default:           return `Unknown tool: ${name}`
-  }
-}
-
 // Static parts of the system prompt — tool list is injected dynamically
 const CLAUDE_PROMPT_HEADER = `You are a coding assistant with tool access. Your job is to inspect a repository, understand the code, and safely modify it when asked.
 
@@ -161,38 +92,20 @@ CONSTRAINTS
 End every response with:
 SUMMARY: (2-3 sentences describing what was done.)`
 
-// Legacy static tool list for when no executor is present
-const LEGACY_CLAUDE_TOOL_LIST = `read_file(path)
-  Read the contents of a file
-
-shell(command)
-  Run a read-only shell command (ls, grep, find, cat, etc.)
-
-git(args)
-  Run a read-only git command (log, diff, status, blame, etc.)
-
-write_file(path, content)
-  Write content to a file, creating it if needed or overwriting if it exists
-
-edit_file(path, old_string, new_string)
-  Edit a file by replacing an exact string match. The old_string must appear exactly once in the file.`
-
 export class ClaudeAgent {
   private client: Anthropic
   private config: ClaudeConfig
-  private toolExecutor: ToolExecutor | null
+  private toolExecutor: ToolExecutor
 
-  constructor(config: ClaudeConfig, toolExecutor?: ToolExecutor) {
+  constructor(config: ClaudeConfig, toolExecutor: ToolExecutor) {
     this.config = config
     this.client = new Anthropic()
-    this.toolExecutor = toolExecutor ?? null
+    this.toolExecutor = toolExecutor
   }
 
   async run(prompt: string, context?: string, repoContext?: string): Promise<ClaudeAgentResult> {
     const messages: Anthropic.MessageParam[] = []
-    const toolList = this.toolExecutor
-      ? this.toolExecutor.registry.describeForPrompt()
-      : LEGACY_CLAUDE_TOOL_LIST
+    const toolList = this.toolExecutor.registry.describeForPrompt()
     const basePrompt = CLAUDE_PROMPT_HEADER + toolList + CLAUDE_PROMPT_FOOTER
     const systemPrompt = repoContext
       ? `Project context:\n${repoContext}\n\n${basePrompt}`
@@ -215,9 +128,7 @@ export class ClaudeAgent {
       let data: Anthropic.Message
       let httpResponse: { headers: { get(name: string): string | null } }
       try {
-        const tools = this.toolExecutor
-          ? this.toolExecutor.registry.listForClaude() as Anthropic.Tool[]
-          : TOOLS
+        const tools = this.toolExecutor.registry.listForClaude() as Anthropic.Tool[]
         const result = await this.client.messages.create({
           model: this.config.claude.model,
           max_tokens: 16384,
@@ -250,13 +161,8 @@ export class ClaudeAgent {
       messages.push({ role: 'assistant', content: data.content })
       const toolResults: Anthropic.ToolResultBlockParam[] = []
       for (const tc of toolBlocks) {
-        let output: string
-        if (this.toolExecutor) {
-          const toolResult = await this.toolExecutor.execute({ tool: tc.name, args: tc.input })
-          output = toolResult.success ? toolResult.output : `Error: ${toolResult.error}`
-        } else {
-          output = await dispatchTool(tc.name, tc.input)
-        }
+        const toolResult = await this.toolExecutor.execute({ tool: tc.name, args: tc.input })
+        const output = toolResult.success ? toolResult.output : `Error: ${toolResult.error}`
         toolResults.push({ type: 'tool_result', tool_use_id: tc.id, content: output })
       }
       messages.push({ role: 'user', content: toolResults })

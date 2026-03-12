@@ -47,7 +47,7 @@ export class Orchestrator {
     const registry = createDefaultRegistry()
     const safetyGate = new SafetyGate(config.safety)
     this.toolExecutor = new ToolExecutor(registry, safetyGate)
-    this.localAgent = localAgent ?? new LocalAgent(config, undefined, this.toolExecutor)
+    this.localAgent = localAgent ?? new LocalAgent(config, this.toolExecutor)
     this.claudeAgent = claudeAgent ?? new ClaudeAgent(config, this.toolExecutor)
     this.tracker = new TokenTracker(config.token_tracking)
     this.claudeOnly = options?.claudeOnly ?? false
@@ -75,7 +75,7 @@ export class Orchestrator {
       })
     }
     // Rebuild local agent with updated registry (MCP tools now included)
-    this.localAgent = new LocalAgent(this.config, undefined, this.toolExecutor)
+    this.localAgent = new LocalAgent(this.config, this.toolExecutor)
   }
 
   async shutdown(): Promise<void> {

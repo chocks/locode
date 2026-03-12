@@ -1,6 +1,4 @@
 import Ollama from 'ollama'
-import { readFileTool, shellTool, gitTool } from '../tools'
-import type { McpManager, McpTool } from '../mcp/client'
 import type { ToolExecutor } from '../tools/executor'
 
 interface LocalConfig {
@@ -55,85 +53,9 @@ Keep explanations concise. Focus on tool usage and findings.
 End every response with:
 SUMMARY: (2-3 sentences describing what you found.)`
 
-// Legacy static prompt for when no executor is present
-const LEGACY_TOOL_LIST = `read_file(path)
-  Read the contents of a file
-
-shell(command)
-  Run a read-only shell command (ls, grep, find, cat, etc.)
-
-git(args)
-  Run a read-only git command (log, diff, status, blame, etc.)`
-
-// Tool schemas for Ollama function calling
-const TOOLS = [
-  {
-    type: 'function' as const,
-    function: {
-      name: 'read_file',
-      description: 'Read the contents of a file',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Absolute or relative path to the file' },
-        },
-        required: ['path'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'shell',
-      description: 'Run a read-only shell command (ls, grep, find, cat, etc.)',
-      parameters: {
-        type: 'object',
-        properties: {
-          command: { type: 'string', description: 'The shell command to run' },
-        },
-        required: ['command'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'git',
-      description: 'Run a read-only git command (log, diff, status, blame, etc.)',
-      parameters: {
-        type: 'object',
-        properties: {
-          args: { type: 'string', description: 'Git subcommand and arguments, e.g. "log --oneline -10"' },
-        },
-        required: ['args'],
-      },
-    },
-  },
-]
-
 // Strip <think>...</think> blocks that thinking-mode models (e.g. qwen3) may emit
 function stripThinkTags(text: string): string {
   return text.replace(/^[\s\S]*?<\/think>\s*/m, '').replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim()
-}
-
-async function dispatchTool(name: string, args: Record<string, string>): Promise<string> {
-  switch (name) {
-    case 'read_file': return readFileTool({ path: args.path })
-    case 'shell':     return shellTool({ command: args.command })
-    case 'git':       return gitTool({ args: args.args })
-    default:          return `Unknown tool: ${name}`
-  }
-}
-
-function mcpToolsToOllama(mcpTools: McpTool[]) {
-  return mcpTools.map(t => ({
-    type: 'function' as const,
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.inputSchema,
-    },
-  }))
 }
 
 function isOllamaConnectionError(err: unknown): boolean {
@@ -145,20 +67,15 @@ function isOllamaConnectionError(err: unknown): boolean {
 
 export class LocalAgent {
   private config: LocalConfig
-  private mcpManager: McpManager | null
-  private mcpToolNames: Set<string> = new Set()
-  private toolExecutor: ToolExecutor | null
+  private toolExecutor: ToolExecutor
 
-  constructor(config: LocalConfig, mcpManager?: McpManager, toolExecutor?: ToolExecutor) {
+  constructor(config: LocalConfig, toolExecutor: ToolExecutor) {
     this.config = config
-    this.mcpManager = mcpManager ?? null
-    this.toolExecutor = toolExecutor ?? null
+    this.toolExecutor = toolExecutor
   }
 
   async run(prompt: string, context?: string, repoContext?: string): Promise<AgentResult> {
-    const toolList = this.toolExecutor
-      ? this.toolExecutor.registry.describeForPrompt()
-      : LEGACY_TOOL_LIST
+    const toolList = this.toolExecutor.registry.describeForPrompt()
     const basePrompt = LOCAL_PROMPT_HEADER + toolList + LOCAL_PROMPT_FOOTER
     const systemPrompt = repoContext
       ? `Project context:\n${repoContext}\n\n${basePrompt}`
@@ -175,18 +92,7 @@ export class LocalAgent {
     let totalOutputTokens = 0
     const MAX_TOOL_ROUNDS = 5  // prevent infinite loops
 
-    // Build tool schemas — use registry when executor is present, else legacy inline
-    let allTools: Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }>
-    if (this.toolExecutor) {
-      allTools = this.toolExecutor.registry.listForLLM()
-    } else {
-      allTools = [...TOOLS] as Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }>
-      if (this.mcpManager) {
-        const mcpTools = this.mcpManager.getTools()
-        allTools.push(...mcpToolsToOllama(mcpTools))
-        this.mcpToolNames = new Set(mcpTools.map(t => t.name))
-      }
-    }
+    const allTools = this.toolExecutor.registry.listForLLM()
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       let response: Awaited<ReturnType<typeof Ollama.chat>>
@@ -227,15 +133,8 @@ export class LocalAgent {
       for (const tc of toolCalls) {
         const name = tc.function.name
         const args = tc.function.arguments as Record<string, string>
-        let result: string
-        if (this.toolExecutor) {
-          const toolResult = await this.toolExecutor.execute({ tool: name, args })
-          result = toolResult.success ? toolResult.output : `Error: ${toolResult.error}`
-        } else if (this.mcpManager && this.mcpToolNames.has(name)) {
-          result = await this.mcpManager.callTool(name, args)
-        } else {
-          result = await dispatchTool(name, args)
-        }
+        const toolResult = await this.toolExecutor.execute({ tool: name, args })
+        const result = toolResult.success ? toolResult.output : `Error: ${toolResult.error}`
         messages.push({ role: 'tool', content: result })
       }
     }
