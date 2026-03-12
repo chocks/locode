@@ -3,7 +3,7 @@ import { shellTool } from '../shell'
 
 export const runCommandDefinition: ToolDefinition = {
   name: 'run_command',
-  description: 'Run a read-only shell command. Allowed: ls, cat, head, tail, grep, find, wc, tree, file, stat, pwd, du',
+  description: 'Run a read-only shell command. Allowed: ls, cat, head, tail, grep, find, wc, file, stat, pwd, du',
   inputSchema: {
     type: 'object',
     properties: {

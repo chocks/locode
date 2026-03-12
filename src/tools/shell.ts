@@ -3,7 +3,7 @@ import { execFileSync } from 'child_process'
 const ALLOWED_COMMANDS = new Set([
   'ls', 'cat', 'find', 'grep', 'head', 'tail', 'wc',
   'echo', 'pwd', 'env', 'which', 'file', 'stat',
-  'tree', 'du', 'df', 'ps', 'uname', 'date',
+  'du', 'df', 'ps', 'uname', 'date',
 ])
 
 const SHELL_OPERATORS = /[|;&`$()]/
