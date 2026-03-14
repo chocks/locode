@@ -110,7 +110,7 @@ describe('ConfigSchema', () => {
   it('defaults safety config when omitted', () => {
     const result = ConfigSchema.parse(baseConfig)
     expect(result.safety.always_confirm).toEqual([])
-    expect(result.safety.auto_approve).toEqual(['read_file', 'search_code', 'list_files', 'git_query'])
+    expect(result.safety.auto_approve).toEqual(['read_file', 'list_files', 'git_query'])
     expect(result.safety.allowed_write_paths).toEqual(['.'])
   })
 

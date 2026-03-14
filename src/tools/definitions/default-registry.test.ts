@@ -12,7 +12,8 @@ describe('createDefaultRegistry', () => {
     expect(names).toContain('git_query')
     expect(names).toContain('write_file')
     expect(names).toContain('edit_file')
-    expect(tools).toHaveLength(5)
+    expect(names).toContain('list_files')
+    expect(tools).toHaveLength(6)
   })
 
   it('produces valid Ollama schemas for all tools', () => {

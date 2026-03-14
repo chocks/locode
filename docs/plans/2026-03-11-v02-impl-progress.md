@@ -15,7 +15,7 @@
 | 3 | `feat/v02-safety-gate` | `SafetyGate` + config schema additions | ✅ Done |
 | 4 | `feat/v02-tool-executor` | `ToolExecutor` (ties registry + safety) | ✅ Done |
 | 5 | `feat/v02-wire-executor` | Wire into `LocalAgent` + `Orchestrator` | ✅ Done |
-| 6 | — | New tools (`search_code`, `list_files`) | ⬜ Not started |
+| 6 | `feat/v02-list-files` | `list_files` tool (`search_code` dropped — `grep -rn` too slow, agents can use `run_command`) | ✅ Done |
 
 ---
 
@@ -102,3 +102,15 @@
 - `shell` → `run_command`
 - `git` → `git_query`
 - `read_file`, `write_file`, `edit_file` — unchanged
+
+## PR 6: list_files Tool
+
+**Files:**
+- `src/tools/definitions/list-files.ts` — `listFilesDefinition` using `fs.readdirSync`
+- `src/tools/definitions/definitions.test.ts` — 4 new tests
+- `src/tools/definitions/default-registry.ts` — registers `list_files`
+- `src/tools/definitions/default-registry.test.ts` — updated count to 6
+
+**Scope change:** `search_code` (ripgrep wrapper) was dropped — `grep -rn` is too slow for agent tool loops, and agents can already use `grep` via `run_command`. May revisit with `rg` as optional dep in v0.3+.
+
+**Also cleaned up:** removed `search_code` from `auto_approve` defaults in `src/config/schema.ts` since the tool doesn't exist.
