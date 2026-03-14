@@ -31,7 +31,15 @@ Turn Locode from a chat router into a coding agent that can analyze code, plan c
 
 Pure file-editing utilities with no LLM dependency.
 
-**Prerequisite:** Add a `search_code` tool to the v0.2 tool registry. The ANALYZE phase needs structured search results (`{ file, line, match }`), which the raw `run_command` tool cannot provide. This is a small addition to `src/tools/definitions/` before Phase A begins.
+**Prerequisite:** Add a `search_code` tool to the v0.2 tool registry. The ANALYZE phase needs structured search results (`{ file, line, match }`), which the raw `run_command` tool cannot provide.
+
+```typescript
+// src/tools/definitions/search-code.ts — tool definition
+// Parameters: { pattern: string, glob?: string, max_results?: number }
+// Uses ripgrep (or grep fallback) under the hood
+// Returns: Array<{ file: string, line: number, match: string }>
+// Registered in default-registry.ts as category: 'search', requiresConfirmation: false
+```
 
 **New files:**
 - `src/editor/types.ts`
@@ -82,6 +90,11 @@ export interface DiffPreview {
 // src/editor/code-editor.ts
 
 export class CodeEditor {
+  constructor(
+    private safetyGate: SafetyGate,  // validates write paths before applying
+    private cwd: string,             // project root for resolving relative paths
+  ) {}
+
   async applyEdits(edits: EditOperation[]): Promise<ApplyResult>
   async rollback(result: ApplyResult): Promise<void>
   async preview(edits: EditOperation[]): Promise<DiffPreview[]>
@@ -306,6 +319,7 @@ if (this.isCodingTask(prompt)) {
 - If validation fails (VALIDATE phase), edits are NOT rolled back. Instead, the agent loops to PLAN with the validation errors — the refinement plan can build on the existing edits.
 - If `max_iterations` is exhausted with validation still failing, all edits across all iterations are rolled back and the user is informed.
 - User can always reject edits in the PRESENT phase, which triggers a full rollback.
+- **Cross-iteration rollback:** `CodingAgent` (not `CodeEditor`) is responsible for holding the initial file snapshots from before the first iteration. `CodeEditor.applyEdits()` captures per-call originals, but the agent maintains a `initialOriginals: Map<string, string>` that tracks the true pre-edit state across all iterations.
 
 ---
 
