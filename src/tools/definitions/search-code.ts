@@ -25,7 +25,10 @@ export const searchCodeDefinition: ToolDefinition = {
     const glob = args.glob as string | undefined
     const maxResults = (args.max_results as number) ?? 20
 
-    const grepArgs = ['-rn', '--include', glob ?? '*', pattern, '.']
+    // Only pass --include when a glob is specified; without it grep searches all files
+    const grepArgs = glob
+      ? ['-rn', '--include', glob, pattern, '.']
+      : ['-rn', pattern, '.']
     try {
       const stdout = execFileSync('grep', grepArgs, {
         encoding: 'utf8',
