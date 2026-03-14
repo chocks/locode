@@ -4,6 +4,7 @@ import { runCommandDefinition } from './run-command'
 import { gitQueryDefinition } from './git-query'
 import { writeFileDefinition } from './write-file'
 import { editFileDefinition } from './edit-file'
+import { listFilesDefinition } from './list-files'
 import path from 'path'
 import fs from 'fs'
 
@@ -129,5 +130,37 @@ describe('editFileDefinition', () => {
     })
     expect(result.success).toBe(false)
     expect(result.error).toContain('not found')
+  })
+})
+
+describe('listFilesDefinition', () => {
+  it('has correct metadata', () => {
+    expect(listFilesDefinition.name).toBe('list_files')
+    expect(listFilesDefinition.category).toBe('read')
+    expect(listFilesDefinition.inputSchema.required).toContain('path')
+  })
+
+  it('handler lists directory contents', async () => {
+    const result = await listFilesDefinition.handler({ path: path.join(__dirname, '../../..') })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('package.json')
+    expect(result.output).toContain('src/')
+  })
+
+  it('handler lists recursively when flag is set', async () => {
+    const result = await listFilesDefinition.handler({
+      path: path.join(__dirname),
+      recursive: true,
+    })
+    expect(result.success).toBe(true)
+    // Should find files in this directory (not just top-level)
+    expect(result.output).toContain('list-files.ts')
+    expect(result.output).toContain('read-file.ts')
+  })
+
+  it('handler returns failure for nonexistent directory', async () => {
+    const result = await listFilesDefinition.handler({ path: '/nonexistent/dir' })
+    expect(result.success).toBe(false)
+    expect(result.error).toBeDefined()
   })
 })

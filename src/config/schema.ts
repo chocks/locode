@@ -49,12 +49,12 @@ export const ConfigSchema = z.object({
   safety: z.object({
     always_confirm: z.array(z.string()).default([]),
     auto_approve: z.array(z.string()).default([
-      'read_file', 'search_code', 'list_files', 'git_query',
+      'read_file', 'list_files', 'git_query',
     ]),
     allowed_write_paths: z.array(z.string()).default(['.']),
   }).default({
     always_confirm: [],
-    auto_approve: ['read_file', 'search_code', 'list_files', 'git_query'],
+    auto_approve: ['read_file', 'list_files', 'git_query'],
     allowed_write_paths: ['.'],
   }),
 })
