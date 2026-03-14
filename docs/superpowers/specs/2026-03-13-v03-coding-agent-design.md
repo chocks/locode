@@ -3,6 +3,7 @@
 **Date:** 2026-03-13
 **Status:** Approved
 **Depends on:** v0.2 (tool registry, executor, safety gate, 6 tools)
+**Minimum context window:** 4096 tokens (local LLM `num_ctx` setting)
 **Source:** `docs/plans/2026-03-10-v03-coding-agent.md`
 
 ---
@@ -30,6 +31,8 @@ Turn Locode from a chat router into a coding agent that can analyze code, plan c
 
 Pure file-editing utilities with no LLM dependency.
 
+**Prerequisite:** Add a `search_code` tool to the v0.2 tool registry. The ANALYZE phase needs structured search results (`{ file, line, match }`), which the raw `run_command` tool cannot provide. This is a small addition to `src/tools/definitions/` before Phase A begins.
+
 **New files:**
 - `src/editor/types.ts`
 - `src/editor/code-editor.ts` + `code-editor.test.ts`
@@ -44,13 +47,22 @@ export interface EditOperation {
   file: string
   operation: 'insert' | 'replace' | 'delete' | 'create'
   // Search-based addressing (preferred — LLMs are bad at line counting)
-  search?: string             // find-and-replace by content match
+  search?: string             // find content match in file (must be unique)
   // Line-based addressing (fallback)
   afterLine?: number          // for insert (0 = beginning of file)
   startLine?: number          // for replace/delete
   endLine?: number            // for replace/delete
   content?: string            // new code (for insert/replace/create)
 }
+
+// Search field semantics per operation type:
+//   insert:  insert `content` AFTER the line containing `search` match
+//   replace: replace `search` match with `content`
+//   delete:  delete the line(s) containing `search` match
+//   create:  `search` is ignored (creates new file with `content`)
+//
+// If `search` matches multiple locations → error (must be unique, same as edit_file tool).
+// If both `search` and line fields are set → `search` takes precedence.
 
 export interface ApplyResult {
   applied: EditOperation[]
@@ -91,6 +103,7 @@ export class DiffRenderer {
 - Both modes supported — search-first, line numbers as fallback.
 - `applyEdits()` stores originals for rollback before writing anything.
 - `preview()` is a dry-run: computes diffs without touching the filesystem.
+- `CodeEditor` validates write paths against `SafetyGate.allowed_write_paths` before applying edits. It receives a `SafetyGate` reference in its constructor — does NOT bypass the safety system.
 
 **Dependency:** `diff` npm package (pure JS, lightweight) for unified diff generation.
 
@@ -101,13 +114,15 @@ export class DiffRenderer {
 Session-scoped memory for tracking agent activity.
 
 **New files:**
-- `src/agent/types.ts`
-- `src/agent/memory.ts` + `memory.test.ts`
+- `src/coding/types.ts`
+- `src/coding/memory.ts` + `memory.test.ts`
+
+Note: uses `src/coding/` (not `src/agent/`) to avoid confusion with the existing `src/agents/` directory which contains LLM agent clients.
 
 **Interfaces:**
 
 ```typescript
-// src/agent/memory.ts
+// src/coding/memory.ts
 
 export interface MemoryEntry {
   timestamp: number
@@ -148,13 +163,13 @@ export class AgentMemory {
 The core agent runtime — LLM-driven analyze→plan→execute→validate→present cycle.
 
 **New files:**
-- `src/agent/planner.ts` + `planner.test.ts`
-- `src/agent/coding-agent.ts` + `coding-agent.test.ts`
+- `src/coding/planner.ts` + `planner.test.ts`
+- `src/coding/coding-agent.ts` + `coding-agent.test.ts`
 
 **Planner:**
 
 ```typescript
-// src/agent/planner.ts
+// src/coding/planner.ts
 
 export interface EditPlan {
   description: string
@@ -166,7 +181,7 @@ export interface EditStep {
   description: string
   file: string
   operation: 'insert' | 'replace' | 'delete' | 'create'
-  target?: string             // function name, line range, or search pattern
+  search?: string             // content match to locate the edit target
   reasoning: string
 }
 
@@ -178,6 +193,11 @@ export interface GatheredContext {
 }
 
 export class Planner {
+  constructor(
+    private localAgent: LocalAgent,
+    private claudeAgent: ClaudeAgent | null,
+  ) {}
+
   async generatePlan(
     prompt: string,
     context: GatheredContext,
@@ -186,25 +206,37 @@ export class Planner {
 
   async refinePlan(
     plan: EditPlan,
-    errors: string[],
+    errors: string[],   // from ApplyResult.failed[].error + EditValidationResult.output
     agent: 'local' | 'claude',
   ): Promise<EditPlan>
 }
+
+// JSON parsing fallback: if LLM produces malformed JSON for EditPlan,
+// Planner attempts extraction with regex (same approach as LocalAgent's
+// parseTextToolCalls). On total failure, returns a single-step plan
+// asking the LLM to retry with simpler output.
 ```
 
 **CodingAgent loop:**
 
 ```typescript
-// src/agent/coding-agent.ts
+// src/coding/coding-agent.ts
 
 export type AgentPhase = 'analyze' | 'plan' | 'execute' | 'validate' | 'present'
+
+// Named EditValidationResult to avoid collision with ToolRegistry's ValidationResult
+export interface EditValidationResult {
+  passed: boolean
+  output: string              // stdout/stderr from validation command
+  command: string             // the command that was run
+}
 
 export interface AgentState {
   phase: AgentPhase
   prompt: string
   plan: EditPlan | null
   editsApplied: EditOperation[]
-  validationResult: ValidationResult | null
+  validationResult: EditValidationResult | null
   iteration: number
   maxIterations: number
 }
@@ -214,17 +246,17 @@ export interface AgentConfig {
   auto_confirm: boolean       // skip user confirmation for edits (default: false)
   show_plan: boolean          // display plan before executing (default: true)
   run_validation: boolean     // run tests/lint after edits (default: true)
-  validation_command?: string // e.g., "npm test"
+  validation_command?: string // e.g., "npm test". If undefined and run_validation=true, validation is skipped (no auto-detection).
 }
 
 export interface AgentRunResult {
   success: boolean
   edits: EditOperation[]
   diffs: string[]
-  validationPassed: boolean | null
+  validationPassed: boolean | null  // null if validation was skipped
   iterations: number
   tokensUsed: { input: number; output: number }
-  agent: 'local' | 'claude' | 'hybrid'
+  agent: 'local' | 'claude'        // whichever agent handled PLAN+EXECUTE (no hybrid — one agent per run)
 }
 
 export class CodingAgent {
@@ -233,6 +265,7 @@ export class CodingAgent {
     private claudeAgent: ClaudeAgent | null,
     private toolExecutor: ToolExecutor,
     private codeEditor: CodeEditor,
+    private planner: Planner,
     private memory: AgentMemory,
     private config: AgentConfig,
   ) {}
@@ -246,7 +279,7 @@ export class CodingAgent {
 
 | Phase | What happens | Model |
 |---|---|---|
-| ANALYZE | Gather context via tools (read_file, search_code, git_query). Check memory first. Max 5 files, 2000 tokens/file. | Local (small action space) |
+| ANALYZE | Gather context via tools (read_file, search_code, git_query). LLM generates tool calls; CodingAgent executes them via ToolExecutor. Check memory first to skip known files. Hard limit: max 5 files, truncated to 2000 tokens/file. | Local (small action space) |
 | PLAN | Planner generates JSON EditPlan from context + memory. No code gen. | Local (≤2 files, ≤3 steps) or Claude (larger) |
 | EXECUTE | Each plan step → LLM generates EditOperation → CodeEditor applies. Preview diffs first. | Follows PLAN routing |
 | VALIDATE | Run validation command. No LLM. On failure, loop to PLAN (up to max_iterations). | None (deterministic) |
@@ -256,15 +289,23 @@ export class CodingAgent {
 
 **Coding task detection:** Internal regex matching on coding verbs (add, fix, implement, refactor, change, update, modify, create, write, delete, remove). Not user-configurable — kept simple. Patterns refined to reduce false positives (e.g. exclude "explain/describe" prefixes).
 
+**Classification precedence:** `isCodingTask()` runs first. If it matches, the prompt goes to `CodingAgent` which internally uses the existing `Router.classify()` result to decide local vs Claude for PLAN+EXECUTE. If `isCodingTask()` does not match, the prompt goes through the existing chat dispatch path as before.
+
 **Integration with Orchestrator:**
 
 ```typescript
 // Modified orchestrator.process()
 if (this.isCodingTask(prompt)) {
-  return this.runCodingAgent(prompt, route)
+  return this.runCodingAgent(prompt, route)  // route still used for local/claude decision
 }
 // else: existing chat dispatch
 ```
+
+**Rollback policy:**
+- If an edit in the EXECUTE phase fails to apply, all previously applied edits in that iteration are rolled back via `CodeEditor.rollback()`. The filesystem returns to its pre-EXECUTE state before looping back to PLAN.
+- If validation fails (VALIDATE phase), edits are NOT rolled back. Instead, the agent loops to PLAN with the validation errors — the refinement plan can build on the existing edits.
+- If `max_iterations` is exhausted with validation still failing, all edits across all iterations are rolled back and the user is informed.
+- User can always reject edits in the PRESENT phase, which triggers a full rollback.
 
 ---
 
@@ -273,12 +314,12 @@ if (this.isCodingTask(prompt)) {
 Event-based streaming for real-time CLI feedback.
 
 **New files:**
-- `src/agent/stream.ts` + `stream.test.ts`
+- `src/coding/stream.ts` + `stream.test.ts`
 
 **Interfaces:**
 
 ```typescript
-// src/agent/stream.ts
+// src/coding/stream.ts
 
 export type StreamEvent =
   | { type: 'phase'; phase: AgentPhase; detail: string }
@@ -329,7 +370,9 @@ editor:
 
 ```
 src/
-├── agent/
+├── tools/definitions/
+│   └── search-code.ts + test       # Prerequisite
+├── coding/
 │   ├── types.ts                    # Phase B
 │   ├── memory.ts + test            # Phase B
 │   ├── planner.ts + test           # Phase C
@@ -341,7 +384,7 @@ src/
 │   └── diff-renderer.ts + test     # Phase A
 ```
 
-**14 new files** (including tests). **4 modified** (orchestrator.ts, repl.ts, config/schema.ts, locode.yaml).
+**16 new files** (including tests). **4 modified** (orchestrator.ts, repl.ts, config/schema.ts, locode.yaml).
 
 ---
 
@@ -355,7 +398,7 @@ src/
 
 ## Performance Budget
 
-Local LLMs have small context windows (2048-4096 tokens). Every prompt must be compact.
+**Minimum requirement:** 4096-token context window (`num_ctx` in Ollama config). Models with 2048 tokens are too small for the PLAN phase — the agent will warn and suggest increasing `num_ctx` or routing to Claude.
 
 | Phase | Max Prompt Tokens | Strategy |
 |---|---|---|
@@ -363,7 +406,9 @@ Local LLMs have small context windows (2048-4096 tokens). Every prompt must be c
 | PLAN | ~1500 | Request + truncated files + memory summary |
 | EXECUTE | ~1000 | Plan step + target file section only |
 
-Techniques: parallel tool execution in ANALYZE, JSON mode for constrained generation, memory-based context reuse, early termination (0 steps → skip), streaming for perceived latency.
+**Degradation:** If context is too tight for PLAN (detected via truncation or repeated malformed JSON), auto-escalate to Claude for that run. Log a warning suggesting the user increase `num_ctx`.
+
+Techniques: parallel tool execution in ANALYZE, JSON mode for constrained generation (with regex fallback for malformed output), memory-based context reuse, early termination (0 steps → skip), streaming for perceived latency.
 
 ---
 
