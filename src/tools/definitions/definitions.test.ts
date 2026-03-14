@@ -5,6 +5,7 @@ import { gitQueryDefinition } from './git-query'
 import { writeFileDefinition } from './write-file'
 import { editFileDefinition } from './edit-file'
 import { listFilesDefinition } from './list-files'
+import { searchCodeDefinition } from './search-code'
 import path from 'path'
 import fs from 'fs'
 
@@ -130,6 +131,39 @@ describe('editFileDefinition', () => {
     })
     expect(result.success).toBe(false)
     expect(result.error).toContain('not found')
+  })
+})
+
+describe('searchCodeDefinition', () => {
+  it('has correct metadata', () => {
+    expect(searchCodeDefinition.name).toBe('search_code')
+    expect(searchCodeDefinition.category).toBe('search')
+    expect(searchCodeDefinition.inputSchema.required).toContain('pattern')
+  })
+
+  it('handler finds matches in project files', async () => {
+    const result = await searchCodeDefinition.handler({ pattern: 'ToolRegistry', max_results: 5 })
+    expect(result.success).toBe(true)
+    const parsed = JSON.parse(result.output)
+    expect(parsed.length).toBeGreaterThan(0)
+    expect(parsed[0]).toHaveProperty('file')
+    expect(parsed[0]).toHaveProperty('line')
+    expect(parsed[0]).toHaveProperty('match')
+  })
+
+  it('handler returns empty array for no matches', async () => {
+    // Split pattern so this source file cannot self-match
+    const noMatchPattern = 'ZZZZ_NO' + '_MATCH_9f3a2b1c_ZZZZ'
+    const result = await searchCodeDefinition.handler({ pattern: noMatchPattern })
+    expect(result.success).toBe(true)
+    expect(JSON.parse(result.output)).toEqual([])
+  })
+
+  it('handler supports glob filtering', async () => {
+    const result = await searchCodeDefinition.handler({ pattern: 'describe', glob: '*.test.ts' })
+    expect(result.success).toBe(true)
+    const parsed = JSON.parse(result.output)
+    expect(parsed.every((r: { file: string }) => r.file.endsWith('.test.ts'))).toBe(true)
   })
 })
 

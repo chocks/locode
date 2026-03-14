@@ -13,7 +13,8 @@ describe('createDefaultRegistry', () => {
     expect(names).toContain('write_file')
     expect(names).toContain('edit_file')
     expect(names).toContain('list_files')
-    expect(tools).toHaveLength(6)
+    expect(names).toContain('search_code')
+    expect(tools).toHaveLength(7)
   })
 
   it('produces valid Ollama schemas for all tools', () => {

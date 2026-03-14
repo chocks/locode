@@ -5,6 +5,7 @@ import { gitQueryDefinition } from './git-query'
 import { writeFileDefinition } from './write-file'
 import { editFileDefinition } from './edit-file'
 import { listFilesDefinition } from './list-files'
+import { searchCodeDefinition } from './search-code'
 
 export function createDefaultRegistry(): ToolRegistry {
   const registry = new ToolRegistry()
@@ -14,5 +15,6 @@ export function createDefaultRegistry(): ToolRegistry {
   registry.register(writeFileDefinition)
   registry.register(editFileDefinition)
   registry.register(listFilesDefinition)
+  registry.register(searchCodeDefinition)
   return registry
 }
