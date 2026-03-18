@@ -17,7 +17,7 @@ Make the coding agent **repo-aware**. Instead of relying on the LLM to guess wha
 
 1. **Index once, query fast** — build index on first run, incrementally update on file changes
 2. **Tools, not magic** — codebase intelligence is exposed as tools the agent calls (fits v0.2's registry)
-3. **Pure JS** — web-tree-sitter (WASM) for parsing, Ollama embeddings for vectors, no native deps
+3. **Pure JS** — web-tree-sitter (WASM) for parsing; **qmd** ([github.com/tobi/qmd](https://github.com/tobi/qmd)) for BM25 + vector semantic search, replacing a custom embedding store
 4. **Configurable scope** — user controls which dirs to index, which to ignore
 5. **Graceful degradation** — agent works without index (falls back to ripgrep), index just makes it faster
 
@@ -43,7 +43,7 @@ Make the coding agent **repo-aware**. Instead of relying on the LLM to guess wha
                     │  ┌──────────────────────┐  │
                     │  │ Embedding Index       │  │  ← semantic search
                     │  │ vector, file, chunk   │  │
-                    │  │ (Ollama embeddings)   │  │
+                    │  │ (qmd — BM25 + vector) │  │
                     │  └──────────────────────┘  │
                     │                            │
                     │  ┌──────────────────────┐  │
@@ -79,7 +79,7 @@ src/
 │   ├── file-index.test.ts
 │   ├── symbol-index.ts                # Tree-sitter symbol extraction
 │   ├── symbol-index.test.ts
-│   ├── embedding-index.ts             # Ollama embedding generation + vector store
+│   ├── embedding-index.ts             # Thin adapter over qmd SDK (collection per repo)
 │   ├── embedding-index.test.ts
 │   ├── dependency-graph.ts            # Import/require graph builder
 │   ├── dependency-graph.test.ts
@@ -99,6 +99,8 @@ src/
 ```
 
 **New files: 18** (including tests). **Modified: 3** (orchestrator.ts, config/schema.ts, locode.yaml).
+
+> **Note on `embedding-index.ts`:** Rather than a full custom vector store (~200 lines of Float32Array math + persistence), this file is a thin adapter (~60 lines) delegating to the qmd TypeScript SDK. qmd handles chunk storage, BM25 + vector hybrid search, incremental index updates, and on-disk persistence. See §8 for the integration decision.
 
 ---
 
@@ -196,16 +198,35 @@ export class SymbolIndex {
 
 ```typescript
 // src/index/embedding-index.ts
+// Thin adapter over the qmd SDK — no custom vector math required.
+
+import { QmdClient } from 'qmd'  // npm package from github.com/tobi/qmd
 
 export class EmbeddingIndex {
-  /** Generate embeddings for code chunks using Ollama */
+  private client: QmdClient
+  private collection: string  // one collection per repo root (e.g., "locode-src")
+
+  constructor(config: { storageDir: string; collection: string }) {
+    this.collection = config.collection
+    this.client = new QmdClient({ dataDir: config.storageDir })
+  }
+
+  /**
+   * Index a file's content as searchable chunks.
+   * qmd handles chunking, embedding generation, and persistence internally.
+   */
   async indexFile(path: string, content: string): Promise<void>
 
-  /** Semantic search: find code chunks most similar to query */
-  async search(query: string, topK?: number): Promise<Array<EmbeddingEntry & { score: number }>>
+  /**
+   * Hybrid semantic + keyword search via qmd.
+   * Returns ranked results with BM25 + vector scores combined.
+   */
+  async search(query: string, topK = 5): Promise<Array<EmbeddingEntry & { score: number }>>
 
-  async save(path: string): Promise<void>
-  async load(path: string): Promise<void>
+  /** Remove a file from the index (called on file deletion/rename) */
+  async removeFile(path: string): Promise<void>
+
+  // save/load not needed — qmd persists to storageDir automatically
 }
 ```
 
@@ -372,15 +393,19 @@ const symbolLookupTool: ToolDefinition = {
 
 const semanticSearchTool: ToolDefinition = {
   name: 'semantic_search',
-  description: 'Find code semantically similar to a natural language description',
+  // qmd hybrid (BM25 + vector) makes this better than pure embedding similarity
+  description: 'Find code by natural language description — uses keyword + semantic hybrid search',
   category: 'search',
   inputSchema: {
     type: 'object',
-    properties: { query: { type: 'string' } },
+    properties: {
+      query: { type: 'string' },
+      top_k: { type: 'number', description: 'Max results to return (default 5)' },
+    },
     required: ['query'],
   },
   handler: async (args) => {
-    const results = await indexer.embeddings.search(String(args.query), 5)
+    const results = await indexer.embeddings.search(String(args.query), Number(args.top_k ?? 5))
     return { success: true, output: JSON.stringify(results) }
   },
 }
@@ -451,13 +476,46 @@ context_retrieval:
 |---|---|---|
 | `web-tree-sitter` | AST parsing (WASM, no native compilation) | Pure JS |
 | Tree-sitter language grammars | `.wasm` files for each language | Static assets |
-| Ollama embedding API | Vector generation via existing Ollama connection | Already installed |
+| `qmd` | BM25 + vector hybrid search, chunk storage, index persistence | npm package |
 
-No new native dependencies. Embeddings use the existing Ollama connection with a dedicated embedding model (e.g., `nomic-embed-text`).
+### Why qmd instead of a custom embedding store
 
-### Vector Storage
+The original plan called for a custom `EmbeddingIndex` using Ollama embeddings + brute-force cosine similarity on `Float32Array`s, with manual persistence to disk. **qmd** ([github.com/tobi/qmd](https://github.com/tobi/qmd)) replaces all of this:
 
-For v0.4, use a simple brute-force cosine similarity search on in-memory Float32Arrays. This is fast enough for repos up to ~10K files. If needed later, add `hnswlib-node` for approximate nearest neighbor search.
+| Concern | Custom approach | qmd |
+|---|---|---|
+| Embedding generation | Ollama HTTP call per chunk | Built-in (local GGUF model via node-llama-cpp) |
+| Search quality | Vector similarity only | **BM25 + vector hybrid** — better for code |
+| Index persistence | Manual JSON/binary serialization | Automatic, handled by qmd |
+| Incremental updates | Custom change detection | Built-in (filesystem scan + hash) |
+| Lines of code owned | ~200 (vector math + storage) | ~60 (adapter only) |
+
+**Trade-off:** qmd bundles its own model runtime (`node-llama-cpp`) rather than reusing Ollama. This means a second local inference process during indexing, but it runs only on `locode index` — not during chat sessions. The `node-llama-cpp` dependency is pre-built (no native compilation step).
+
+**MCP server option:** qmd also ships as an MCP server. If the user runs `qmd serve`, the `EmbeddingIndex` adapter can use qmd's MCP transport instead of the SDK, keeping the indexer process separate. This is optional — the SDK path works for single-user local use.
+
+### Config: qmd section
+
+```typescript
+// Added to src/config/schema.ts alongside IndexConfigSchema
+
+const QmdConfigSchema = z.object({
+  collection: z.string().default('locode-codebase'),  // qmd collection name
+  model: z.string().default('nomic-embed-text'),       // GGUF embedding model
+  use_mcp_server: z.boolean().default(false),          // use qmd MCP server instead of SDK
+  mcp_server_url: z.string().optional(),               // e.g., "http://localhost:3000"
+})
+```
+
+```yaml
+# locode.yaml additions
+
+qmd:
+  collection: locode-codebase
+  model: nomic-embed-text
+  use_mcp_server: false
+  # mcp_server_url: http://localhost:3000  # uncomment to use shared qmd server
+```
 
 ---
 
@@ -494,7 +552,7 @@ Background updates:
 | Full index (10K files) | < 60s | Parallelized per language |
 | Incremental update | < 1s | Only changed files |
 | Symbol search | < 10ms | In-memory map lookup |
-| Semantic search | < 100ms | Brute-force cosine similarity |
+| Semantic search | < 100ms | qmd hybrid BM25 + vector (pre-built index) |
 | Context retrieval | < 200ms | Pipeline: symbol + semantic + budget |
 
 ---
@@ -521,7 +579,8 @@ locode index --rebuild    # Force full rebuild
 
 - [ ] File index scans repo respecting .gitignore
 - [ ] Symbol index extracts functions/classes/types for TypeScript and JavaScript
-- [ ] Embedding index generates and searches vectors via Ollama
+- [ ] Embedding index delegates to qmd SDK (BM25 + vector hybrid search, automatic persistence)
+- [ ] `use_mcp_server: true` routes qmd calls through MCP transport instead of SDK
 - [ ] Dependency graph tracks import/require relationships
 - [ ] Incremental update only re-indexes changed files
 - [ ] ContextRetriever returns ranked, budget-constrained context
