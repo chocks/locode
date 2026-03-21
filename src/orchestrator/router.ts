@@ -1,4 +1,4 @@
-import Ollama from 'ollama'
+import { Ollama } from 'ollama'
 import type { Config } from '../config/schema'
 
 export type AgentType = 'local' | 'claude'
@@ -20,10 +20,12 @@ type AmbiguousResolver = (prompt: string) => Promise<ResolverResult>
 export class Router {
   private config: Config
   private resolveAmbiguous: AmbiguousResolver
+  private ollama: InstanceType<typeof Ollama>
 
   constructor(config: Config, resolver?: AmbiguousResolver) {
     this.config = config
     this.resolveAmbiguous = resolver ?? this.defaultResolver.bind(this)
+    this.ollama = new Ollama({ host: config.local_llm.base_url })
   }
 
   async classify(prompt: string): Promise<RouteDecision> {
@@ -49,7 +51,7 @@ export class Router {
 
   private async defaultResolver(prompt: string): Promise<ResolverResult> {
     try {
-      const response = await Ollama.chat({
+      const response = await this.ollama.chat({
         model: this.config.local_llm.model,
         messages: [{
           role: 'user',
