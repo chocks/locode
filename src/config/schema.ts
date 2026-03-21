@@ -19,6 +19,14 @@ export const McpRemoteServerSchema = z.object({
 
 export const McpServerSchema = z.discriminatedUnion('type', [McpStdioServerSchema, McpRemoteServerSchema])
 
+export const AgentConfigSchema = z.object({
+  max_iterations: z.number().min(1).max(10).default(5),
+  auto_confirm: z.boolean().default(false),
+  show_plan: z.boolean().default(true),
+  run_validation: z.boolean().default(true),
+  validation_command: z.string().optional(),
+})
+
 export const ConfigSchema = z.object({
   local_llm: z.object({
     provider: z.literal('ollama'),
@@ -44,6 +52,12 @@ export const ConfigSchema = z.object({
   token_tracking: z.object({
     enabled: z.boolean(),
     log_file: z.string(),
+  }),
+  agent: AgentConfigSchema.default({
+    max_iterations: 5,
+    auto_confirm: false,
+    show_plan: true,
+    run_validation: true,
   }),
   mcp_servers: z.record(z.string(), McpServerSchema).default({}),
   safety: z.object({
