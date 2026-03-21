@@ -51,6 +51,12 @@ export class Planner {
 
     return `You are a code editing planner. Create an edit plan as JSON. Do NOT write code.
 
+RULES:
+- Use "create" to make NEW files. Never insert/replace into an existing file to create something unrelated.
+- Use "insert" or "replace" ONLY when modifying existing code in a file (e.g. fixing a method, adding an import).
+- If the request is for something new (e.g. "write a hello world script"), create a new file.
+- If the request mentions a specific file or method, edit that file.
+
 REQUEST: ${prompt}
 
 FILES:
@@ -68,7 +74,7 @@ Respond with ONLY a JSON object:
       "description": "what this step does",
       "file": "path/to/file",
       "operation": "insert|replace|delete|create",
-      "search": "exact text to find in file",
+      "search": "exact text to find in file (only for insert/replace/delete)",
       "reasoning": "why this change"
     }
   ],
