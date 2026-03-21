@@ -6,11 +6,18 @@ interface LocalConfig {
   context?: { handoff: 'summary'; max_summary_tokens: number }
 }
 
+export interface ToolCallRecord {
+  tool: string
+  args: Record<string, unknown>
+  result?: { success: boolean; output: string }
+}
+
 export interface AgentResult {
   content: string
   summary: string
   inputTokens: number
   outputTokens: number
+  toolCalls?: ToolCallRecord[]
 }
 
 // Static parts of the system prompt — tool list is injected dynamically
@@ -104,6 +111,7 @@ export class LocalAgent {
     const MAX_TOOL_ROUNDS = 5  // prevent infinite loops
     let lastFailedCall = ''
     let consecutiveFailures = 0
+    const toolCallRecords: ToolCallRecord[] = []
 
     const allTools = this.toolExecutor.registry.listForLLM()
 
@@ -159,7 +167,7 @@ export class LocalAgent {
           break
         }
         const summary = this.extractSummary(content)
-        return { content, summary, inputTokens: totalInputTokens, outputTokens: totalOutputTokens }
+        return { content, summary, inputTokens: totalInputTokens, outputTokens: totalOutputTokens, toolCalls: toolCallRecords.length > 0 ? toolCallRecords : undefined }
       }
 
       // Execute tool calls and append results — include tool_calls so model
@@ -173,6 +181,7 @@ export class LocalAgent {
           process.stderr.write(`[tool] ${name}(${JSON.stringify(args)})\n`)
         }
         const toolResult = await this.toolExecutor.execute({ tool: name, args })
+        toolCallRecords.push({ tool: name, args, result: { success: toolResult.success, output: toolResult.output } })
         const result = toolResult.success ? toolResult.output : `Error: ${toolResult.error}`
         if (this.verbose) {
           const preview = result.length > 200 ? result.slice(0, 200) + '...' : result
@@ -229,6 +238,7 @@ export class LocalAgent {
       summary: this.extractSummary(content),
       inputTokens: totalInputTokens + (final.prompt_eval_count ?? 0),
       outputTokens: totalOutputTokens + (final.eval_count ?? 0),
+      toolCalls: toolCallRecords.length > 0 ? toolCallRecords : undefined,
     }
   }
 
