@@ -1,0 +1,38 @@
+local_llm:
+  provider: ollama
+  model: qwen3:8b
+  base_url: http://localhost:9781
+
+claude:
+  model: claude-sonnet-4-6
+  token_threshold: 0.99
+
+routing:
+  rules:
+    - pattern: "grep|search|find|list|read|git log|git diff|git status"
+      agent: local
+    - pattern: "refactor|redesign|architect|fix|bug|debug|explain complex"
+      agent: claude
+  ambiguous_resolver: local
+  escalation_threshold: 0.7
+
+context:
+  handoff: summary
+  max_summary_tokens: 500
+  max_file_bytes: 51200
+  repo_context_files: []
+
+token_tracking:
+  enabled: false
+  log_file: /tmp/locode-e2e.log
+
+safety:
+  always_confirm: []
+  auto_approve:
+    - read_file
+    - list_files
+    - grep
+    - git_query
+    - search_code
+  allowed_write_paths:
+    - "."
