@@ -5,6 +5,7 @@ import { createSpinner } from './spinner'
 import { formatPrompt, formatContinuation, formatSeparator, type PromptMode } from './display'
 import { printResult, printStats } from './display'
 import type { Config } from '../config/schema'
+import { StreamRenderer } from '../coding/stream'
 
 // ~50k chars ≈ 12.5k tokens — large enough for full files, small enough to avoid OOM
 const MAX_INPUT_CHARS = 50_000
@@ -123,7 +124,17 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
     try {
       let result: OrchestratorResult
 
-      if (orch.isLocalOnly() || orch.isClaudeOnly() || orch.isLocalFallback()) {
+      // Coding task — use streaming agent
+      if (orch.getCodingAgent() && orch.isCodingTask(input)) {
+        const codingAgent = orch.getCodingAgent()!
+        const renderer = new StreamRenderer(codingAgent)
+        renderer.start()
+        try {
+          result = await orch.runCodingAgent(input)
+        } finally {
+          renderer.stop()
+        }
+      } else if (orch.isLocalOnly() || orch.isClaudeOnly() || orch.isLocalFallback()) {
         const spinner = createSpinner('Thinking...')
         spinner.start()
         try {

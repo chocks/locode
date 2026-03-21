@@ -9,6 +9,10 @@ import { McpManager } from '../mcp/client'
 import { ToolExecutor } from '../tools/executor'
 import { SafetyGate } from '../tools/safety-gate'
 import { createDefaultRegistry } from '../tools/definitions/default-registry'
+import { CodingAgent } from '../coding/coding-agent'
+import { Planner } from '../coding/planner'
+import { AgentMemory } from '../coding/memory'
+import { CodeEditor } from '../editor/code-editor'
 
 function isRateLimitError(err: unknown): boolean {
   return err instanceof Error && 'status' in err && (err as { status: number }).status === 429
@@ -42,6 +46,7 @@ export class Orchestrator {
   private mcpManager: McpManager | null = null
 
   private toolExecutor: ToolExecutor
+  private codingAgent: CodingAgent | null = null
 
   constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent, options?: OrchestratorOptions) {
     this.config = config
@@ -56,6 +61,21 @@ export class Orchestrator {
     this.localOnly = options?.localOnly ?? (!process.env.ANTHROPIC_API_KEY)
     this.verbose = options?.verbose ?? false
     this.repoContext = loadRepoContext(config.context.repo_context_files, config.context.max_file_bytes)
+
+    if (config.agent) {
+      const codeEditor = new CodeEditor(safetyGate, process.cwd())
+      const planner = new Planner(this.localAgent, this.claudeAgent)
+      const agentMemory = new AgentMemory()
+      this.codingAgent = new CodingAgent(
+        this.localAgent,
+        this.localOnly ? null : this.claudeAgent,
+        this.toolExecutor,
+        codeEditor,
+        planner,
+        agentMemory,
+        config.agent,
+      )
+    }
   }
 
   async initMcp(): Promise<void> {
@@ -134,6 +154,11 @@ export class Orchestrator {
       return { ...result, agent: 'local', routeMethod: 'rule', reason: '--local-only mode' }
     }
 
+    // Coding task detection — routes to CodingAgent (respects mode flags)
+    if (!this.localFallback && this.codingAgent && this.isCodingTask(prompt)) {
+      return this.runCodingAgent(enrichedPrompt)
+    }
+
     const decision = await this.router.classify(enrichedPrompt)
     let reason = decision.reason
 
@@ -209,6 +234,40 @@ export class Orchestrator {
     this.tracker.record({ agent: 'claude', input: result.inputTokens, output: result.outputTokens, model: this.config.claude.model })
     await this.checkAndTriggerFallback(result)
     return { ...result, agent: 'claude', routeMethod: 'rule', reason: 'user requested Claude escalation' }
+  }
+
+  isCodingTask(prompt: string): boolean {
+    if (/^(explain|describe|what|how|why|show|tell|list)\b/i.test(prompt)) return false
+    return /\b(add|fix|implement|refactor|change|update|modify|create|write|delete|remove)\b/i.test(prompt)
+  }
+
+  async runCodingAgent(prompt: string): Promise<OrchestratorResult> {
+    if (!this.codingAgent) {
+      return this.process(prompt)
+    }
+    const result = await this.codingAgent.run(prompt)
+    this.tracker.record({
+      agent: result.agent,
+      input: result.tokensUsed.input,
+      output: result.tokensUsed.output,
+      model: result.agent === 'local' ? this.config.local_llm.model : this.config.claude.model,
+    })
+    const summary = result.success
+      ? `Applied ${result.edits.length} edits (${result.iterations} iterations)`
+      : 'Coding agent failed to apply edits'
+    return {
+      content: result.diffs.join('\n') || summary,
+      summary,
+      inputTokens: result.tokensUsed.input,
+      outputTokens: result.tokensUsed.output,
+      agent: result.agent,
+      routeMethod: 'rule',
+      reason: 'coding task detected',
+    }
+  }
+
+  getCodingAgent(): CodingAgent | null {
+    return this.codingAgent
   }
 
   getStats() { return this.tracker.getStats() }
