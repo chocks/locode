@@ -97,6 +97,22 @@ src/
   tracker/      # Token usage + cost estimation
 ```
 
+### E2E Tests
+
+End-to-end tests verify the full CLI pipeline by spawning locode against lightweight HTTP stub servers that mimic Ollama and Anthropic APIs. No external services required.
+
+**Prerequisites:** Build the project first — E2E tests run the compiled CLI.
+
+```bash
+npm run build
+npm run test:e2e
+```
+
+The tests verify:
+- Simple prompts (e.g., `grep`) route to local LLM
+- Complex prompts (e.g., `refactor`) route to Claude
+- Missing API key triggers local-only fallback
+
 ### Contributing
 
 1. Fork and branch from `main` — never commit directly
