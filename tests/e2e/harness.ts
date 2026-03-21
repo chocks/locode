@@ -18,12 +18,12 @@ let ollamaRequests: RecordedRequest[] = []
 let ollamaServer: http.Server | null = null
 
 function handleOllamaChat(body: Record<string, unknown>): object {
-  // Detect classification prompts from the Router's defaultResolver
   const messages = body.messages as Array<{ role: string; content: string }> | undefined
+
+  // Detect classification prompts from the Router's defaultResolver
   const isClassification = messages?.some(
     m => m.content.includes('"agent"') && m.content.includes('"confidence"')
   )
-
   if (isClassification) {
     return {
       message: {
@@ -36,10 +36,34 @@ function handleOllamaChat(body: Record<string, unknown>): object {
     }
   }
 
+  // Detect if this is a follow-up after tool execution (messages contain tool results)
+  const hasToolResults = messages?.some(m => m.role === 'tool')
+
+  // Detect if the user prompt asks to read a file (triggers tool-call mode)
+  const userPrompt = messages?.filter(m => m.role === 'user').pop()?.content ?? ''
+  const wantsToolCall = /read.*file|show.*contents/i.test(userPrompt) && !hasToolResults
+
+  if (wantsToolCall) {
+    return {
+      message: {
+        role: 'assistant',
+        content: '',
+        tool_calls: [{ function: { name: 'read_file', arguments: { path: 'package.json' } } }],
+      },
+      prompt_eval_count: 30,
+      eval_count: 5,
+    }
+  }
+
+  // Final response — either after tool execution or for simple prompts
+  const responseText = hasToolResults
+    ? 'Local LLM tool response: file contents received and analyzed'
+    : 'Local LLM response'
+
   return {
     message: {
       role: 'assistant',
-      content: 'Local LLM response',
+      content: responseText,
       tool_calls: [],
     },
     prompt_eval_count: 50,
@@ -103,15 +127,42 @@ export function startAnthropicStub(port = 9782): Promise<void> {
         req.on('end', () => {
           const body = JSON.parse(data)
           anthropicRequests.push({ body })
-          const response = {
-            id: 'msg_test',
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'text', text: 'Claude response' }],
-            model: 'claude-sonnet-4-6',
-            usage: { input_tokens: 1500, output_tokens: 300 },
-            stop_reason: 'end_turn',
-          }
+
+          // Detect if messages contain tool_result (follow-up after tool execution)
+          const messages = body.messages as Array<{ role: string; content: unknown }> | undefined
+          const hasToolResults = messages?.some(m => {
+            if (m.role !== 'user') return false
+            const content = m.content
+            return Array.isArray(content) && content.some(
+              (b: { type?: string }) => b.type === 'tool_result'
+            )
+          })
+
+          // Detect if user prompt asks to analyze a file (triggers tool-call mode)
+          const userMessages = messages?.filter(m => m.role === 'user' && typeof m.content === 'string') ?? []
+          const userPrompt = userMessages.length > 0 ? (userMessages[userMessages.length - 1].content as string) : ''
+          const wantsToolCall = /analyze.*file|debug.*file|explain.*bug/i.test(userPrompt) && !hasToolResults
+
+          const response = wantsToolCall
+            ? {
+              id: 'msg_test',
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'tool_use', id: 'toolu_e2e_01', name: 'read_file', input: { path: 'package.json' } }],
+              model: 'claude-sonnet-4-6',
+              usage: { input_tokens: 1500, output_tokens: 100 },
+              stop_reason: 'tool_use',
+            }
+            : {
+              id: 'msg_test',
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'text', text: hasToolResults ? 'Claude tool response: file analyzed successfully' : 'Claude response' }],
+              model: 'claude-sonnet-4-6',
+              usage: { input_tokens: 1500, output_tokens: 300 },
+              stop_reason: 'end_turn',
+            }
+
           res.writeHead(200, {
             'Content-Type': 'application/json',
             'anthropic-ratelimit-tokens-remaining': '90000',
