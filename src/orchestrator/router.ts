@@ -55,27 +55,24 @@ export class Router {
         model: this.config.local_llm.model,
         messages: [{
           role: 'user',
-          content: `Classify the following coding task.
+          content: `Classify this coding task by complexity.
 
-Agents:
-
-- "local"
-  Repository exploration tasks such as:
+- "local" — simple tasks a small LLM can handle:
   file reading, grep, searching code, shell commands, git queries,
-  repo structure discovery, release/version inspection.
+  simple code generation (hello world, boilerplate, small functions),
+  straightforward single-file edits, adding imports, renaming variables.
 
-- "claude"
-  Code generation, refactoring, architecture design,
-  writing tests, debugging, fixing bugs, explaining code behavior.
+- "claude" — complex tasks needing a large LLM:
+  multi-file refactoring, architecture design, complex debugging,
+  fixing subtle bugs, explaining complex code behavior,
+  tasks requiring deep understanding of multiple files.
 
-Task:
-"${prompt}"
+Task: "${prompt}"
 
-Use confidence below 0.7 if the task could reasonably fit either agent.
-
-Reply with JSON only. Do not include any text outside the JSON object.
-
-{"agent": "local | claude", "confidence": 0.0-1.0}`
+Respond with ONLY this JSON:
+{"agent": "local", "confidence": 0.9}
+or
+{"agent": "claude", "confidence": 0.9}`
         }],
       })
       const answer = response.message.content.trim()
