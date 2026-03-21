@@ -37,6 +37,13 @@ token_tracking:
   enabled: true
   log_file: ~/.locode/usage.log
 
+agent:
+  max_iterations: 5
+  auto_confirm: false
+  show_plan: true
+  run_validation: true
+  # validation_command: "npm test"
+
 # mcp_servers:
 #   linear:
 #     type: remote
