@@ -22,7 +22,11 @@ interface LLMAgent {
 const MAX_ANALYZE_FILES = 5
 const MAX_FILE_TOKENS = 2000 // approximate chars
 
+export type ConfirmPlanFn = (plan: EditPlan) => Promise<boolean>
+
 export class CodingAgent extends EventEmitter {
+  private confirmPlan: ConfirmPlanFn | null = null
+
   constructor(
     private localAgent: LLMAgent,
     private claudeAgent: LLMAgent | null,
@@ -33,6 +37,10 @@ export class CodingAgent extends EventEmitter {
     private config: AgentConfig,
   ) {
     super()
+  }
+
+  setConfirmPlan(fn: ConfirmPlanFn | null): void {
+    this.confirmPlan = fn
   }
 
   async run(prompt: string): Promise<AgentRunResult> {
@@ -76,6 +84,16 @@ export class CodingAgent extends EventEmitter {
 
         if (currentPlan.steps.length === 0) {
           break
+        }
+
+        // === CONFIRM ===
+        if (!this.config.auto_confirm && this.confirmPlan) {
+          const confirmed = await this.confirmPlan(currentPlan)
+          if (!confirmed) {
+            const result = this.buildResult(false, [], [], null, iteration, totalInput, totalOutput, agentUsed)
+            this.emit('stream', { type: 'done', result } as StreamEvent)
+            return result
+          }
         }
 
         // === EXECUTE ===

@@ -127,12 +127,23 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
       // Coding task — use streaming agent
       if (orch.getCodingAgent() && orch.isCodingTask(input)) {
         const codingAgent = orch.getCodingAgent()!
+        codingAgent.setConfirmPlan(async (plan) => {
+          console.log(`\nPlan: ${plan.steps.length} edit(s) across ${[...new Set(plan.steps.map(s => s.file))].join(', ')}`)
+          for (const step of plan.steps) {
+            console.log(`  ${step.operation} ${step.file}: ${step.description}`)
+          }
+          processing = false
+          const answer = await askQuestion(rl, '\n   Apply these edits? [Y/n] ')
+          processing = true
+          return answer.trim().toLowerCase() !== 'n'
+        })
         const renderer = new StreamRenderer(codingAgent)
         renderer.start()
         try {
           result = await orch.runCodingAgent(input)
         } finally {
           renderer.stop()
+          codingAgent.setConfirmPlan(null)
         }
       } else if (orch.isLocalOnly() || orch.isClaudeOnly() || orch.isLocalFallback()) {
         const spinner = createSpinner('Thinking...')
