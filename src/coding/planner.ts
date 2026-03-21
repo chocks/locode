@@ -138,11 +138,21 @@ Respond with ONLY the corrected JSON plan (same format as above).`
       steps: p.steps.map(s => ({
         description: s.description ?? '',
         file: s.file ?? '',
-        operation: s.operation ?? 'replace',
+        operation: this.normalizeOperation(s.operation),
         search: s.search,
         reasoning: s.reasoning ?? '',
       })),
       estimatedFiles: p.estimatedFiles ?? p.steps.map(s => s.file),
     }
+  }
+
+  private normalizeOperation(op: string | undefined): 'insert' | 'replace' | 'delete' | 'create' {
+    const valid = ['insert', 'replace', 'delete', 'create']
+    if (op && valid.includes(op)) return op as 'insert' | 'replace' | 'delete' | 'create'
+    // Map common LLM mistakes to valid operations
+    if (op === 'edit' || op === 'edit_file' || op === 'modify' || op === 'update') return 'replace'
+    if (op === 'add' || op === 'append') return 'insert'
+    if (op === 'write' || op === 'write_file' || op === 'new') return 'create'
+    return 'replace'
   }
 }

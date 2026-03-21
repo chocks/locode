@@ -98,7 +98,7 @@ export class CodingAgent extends EventEmitter {
 
         // === EXECUTE ===
         this.emitPhase('execute', `Applying ${currentPlan.steps.length} edits`)
-        const edits = await this.executeSteps(currentPlan, planAgent)
+        const edits = await this.executeSteps(currentPlan, planAgent, context.gathered)
         totalInput += edits.tokensUsed.input
         totalOutput += edits.tokensUsed.output
 
@@ -173,6 +173,26 @@ export class CodingAgent extends EventEmitter {
     gathered: GatheredContext
     tokensUsed: { input: number; output: number }
   }> {
+    const files: GatheredContext['files'] = []
+    const searchResults: GatheredContext['searchResults'] = []
+
+    // Pre-read any files explicitly mentioned in the prompt
+    const mentionedFiles = this.extractMentionedFiles(prompt)
+    for (const filePath of mentionedFiles) {
+      try {
+        const readResult = await this.toolExecutor.execute({ tool: 'read_file', args: { path: filePath } })
+        if (readResult.success) {
+          const truncated = readResult.output.slice(0, MAX_FILE_TOKENS * 4)
+          files.push({ path: filePath, content: truncated, relevance: 'mentioned in prompt' })
+          this.memory.record({ type: 'file_read', detail: filePath })
+          this.emit('stream', { type: 'tool_call', tool: 'read_file', args: { path: filePath } } as StreamEvent)
+        }
+      } catch {
+        // File doesn't exist — that's fine
+      }
+    }
+
+    // Use local agent to gather additional context via tools
     const toolList = this.toolExecutor.registry.describeForPrompt()
     const memoryContext = this.memory.toPromptContext()
     const knownFiles = this.memory.getRecentFiles()
@@ -180,12 +200,9 @@ export class CodingAgent extends EventEmitter {
       ? `\nAlready read (skip these): ${knownFiles.join(', ')}`
       : ''
 
-    const analyzePrompt = `You have these tools:\n${toolList}\n\n${memoryContext}${skipNote}\n\nWhat files should I read or search to handle this request?\nRequest: ${prompt}\n\nUse tools to gather context. Limit to ${MAX_ANALYZE_FILES} files max.`
+    const analyzePrompt = `You have these tools:\n${toolList}\n\n${memoryContext}${skipNote}\n\nWhat additional files should I read or search to handle this request?\nRequest: ${prompt}\n\nUse tools to gather context. Limit to ${MAX_ANALYZE_FILES} files max. If you already have enough context, just respond with your analysis.`
 
     const result = await this.localAgent.run(analyzePrompt)
-
-    const files: GatheredContext['files'] = []
-    const searchResults: GatheredContext['searchResults'] = []
 
     // Extract file/search info from tool calls that the agent executed
     if (result.toolCalls) {
@@ -194,9 +211,11 @@ export class CodingAgent extends EventEmitter {
 
         if (call.tool === 'read_file' && call.result?.success) {
           const filePath = call.args.path as string
-          const truncated = (call.result.output ?? '').slice(0, MAX_FILE_TOKENS * 4)
-          files.push({ path: filePath, content: truncated, relevance: 'analyzed' })
-          this.memory.record({ type: 'file_read', detail: filePath })
+          if (!files.some(f => f.path === filePath)) {
+            const truncated = (call.result.output ?? '').slice(0, MAX_FILE_TOKENS * 4)
+            files.push({ path: filePath, content: truncated, relevance: 'analyzed' })
+            this.memory.record({ type: 'file_read', detail: filePath })
+          }
         } else if (call.tool === 'search_code' && call.result?.success) {
           try {
             const results = JSON.parse(call.result.output ?? '[]')
@@ -219,7 +238,22 @@ export class CodingAgent extends EventEmitter {
     }
   }
 
-  private async executeSteps(plan: EditPlan, agent: 'local' | 'claude'): Promise<{
+  private extractMentionedFiles(prompt: string): string[] {
+    const files: string[] = []
+    const pattern = /\b([\w./-]+\.(?:ts|js|tsx|jsx|py|rs|go|java|json|yaml|yml|md|css|html|sh))\b/g
+    let match
+    while ((match = pattern.exec(prompt)) !== null) {
+      const candidate = match[1]
+      files.push(candidate)
+      // Also try with src/ prefix for bare filenames
+      if (!candidate.startsWith('src/') && !candidate.startsWith('/')) {
+        files.push(`src/${candidate}`)
+      }
+    }
+    return [...new Set(files)]
+  }
+
+  private async executeSteps(plan: EditPlan, agent: 'local' | 'claude', context: GatheredContext): Promise<{
     operations: EditOperation[]
     tokensUsed: { input: number; output: number }
   }> {
@@ -229,6 +263,12 @@ export class CodingAgent extends EventEmitter {
     let totalOutput = 0
 
     for (const step of plan.steps) {
+      // Include file content so the LLM can generate accurate search strings
+      const fileContent = context.files.find(f => f.path === step.file)?.content
+      const fileSection = fileContent
+        ? `\nCURRENT FILE CONTENT of ${step.file}:\n\`\`\`\n${fileContent}\n\`\`\`\n`
+        : ''
+
       const stepPrompt = `Generate a JSON edit operation for this step:
 
 Step: ${step.description}
@@ -236,6 +276,10 @@ File: ${step.file}
 Operation: ${step.operation}
 ${step.search ? `Target: ${step.search}` : ''}
 Reasoning: ${step.reasoning}
+${fileSection}
+For "search": use an EXACT string from the file content above. It must match uniquely.
+For "content": the new text to insert or replace with.
+For "create" operations: "search" is not needed.
 
 Respond with ONLY a JSON object:
 { "file": "...", "operation": "...", "search": "...", "content": "..." }`
