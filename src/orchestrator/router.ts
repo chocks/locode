@@ -69,10 +69,10 @@ export class Router {
 
 Task: "${prompt}"
 
-Respond with ONLY this JSON:
-{"agent": "local", "confidence": 0.9}
-or
-{"agent": "claude", "confidence": 0.9}`
+Set confidence 0.9-1.0 if clearly one agent, 0.5-0.8 if borderline.
+
+Respond with ONLY JSON, nothing else:
+{"agent": "local | claude", "confidence": 0.0-1.0}`
         }],
       })
       const answer = response.message.content.trim()
