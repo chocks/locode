@@ -1,4 +1,4 @@
-import Ollama from 'ollama'
+import { Ollama } from 'ollama'
 import type { ToolExecutor } from '../tools/executor'
 
 interface LocalConfig {
@@ -76,11 +76,13 @@ export class LocalAgent {
   private config: LocalConfig
   private toolExecutor: ToolExecutor
   private verbose: boolean
+  private ollama: InstanceType<typeof Ollama>
 
   constructor(config: LocalConfig, toolExecutor: ToolExecutor, options?: LocalAgentOptions) {
     this.config = config
     this.toolExecutor = toolExecutor
     this.verbose = options?.verbose ?? false
+    this.ollama = new Ollama({ host: config.local_llm.base_url })
   }
 
   async run(prompt: string, context?: string, repoContext?: string): Promise<AgentResult> {
@@ -106,12 +108,12 @@ export class LocalAgent {
     const allTools = this.toolExecutor.registry.listForLLM()
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      let response: Awaited<ReturnType<typeof Ollama.chat>>
+      let response: Awaited<ReturnType<InstanceType<typeof Ollama>['chat']>>
       try {
-        response = await Ollama.chat({
+        response = await this.ollama.chat({
           model: this.config.local_llm.model,
-          messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
-          tools: allTools as unknown as Parameters<typeof Ollama.chat>[0]['tools'],
+          messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<InstanceType<typeof Ollama>['chat']>[0]['messages'],
+          tools: allTools as unknown as Parameters<InstanceType<typeof Ollama>['chat']>[0]['tools'],
 
           ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
         })
@@ -204,11 +206,11 @@ export class LocalAgent {
     }
 
     // Fallback if max rounds exceeded — get final answer without tools
-    let final: Awaited<ReturnType<typeof Ollama.chat>>
+    let final: Awaited<ReturnType<InstanceType<typeof Ollama>['chat']>>
     try {
-      final = await Ollama.chat({
+      final = await this.ollama.chat({
         model: this.config.local_llm.model,
-        messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<typeof Ollama.chat>[0]['messages'],
+        messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<InstanceType<typeof Ollama>['chat']>[0]['messages'],
         think: false,
         ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
       })
