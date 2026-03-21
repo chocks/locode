@@ -37,7 +37,7 @@ INSTRUCTIONS
 2. For questions about specific files or code, use tools to read/search first. Do not guess file contents.
 3. After receiving a tool result, respond with your answer in plain text.
 4. Only call another tool if the first result was insufficient.
-5. You cannot modify files. Only read and explore.
+5. For simple code tasks (create a file, small edits), use write_file or edit_file directly.
 6. Keep answers concise.`
 
 // Strip <think>...</think> blocks that thinking-mode models (e.g. qwen3) may emit.
