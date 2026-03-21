@@ -48,6 +48,7 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@sentry/node": "^10.42.0",
     "commander": "^14.0.3",
+    "diff": "^8.0.3",
     "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1",
     "ollama": "^0.6.3",
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/diff": "^7.0.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.3.3",
     "eslint": "^10.0.2",
