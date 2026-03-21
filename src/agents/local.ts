@@ -22,8 +22,7 @@ export interface AgentResult {
 
 // Static parts of the system prompt — tool list is injected dynamically
 function buildPromptHeader(): string {
-  return `You are a coding assistant. Use the provided tools to answer questions.
-You are working in: ${process.cwd()}
+  return `You are a coding assistant working in: ${process.cwd()}
 Always use relative paths (e.g. README.md, src/index.ts). Never use /path/to or placeholder paths.
 
 TOOLS
@@ -34,11 +33,12 @@ TOOLS
 const LOCAL_PROMPT_FOOTER = `
 
 INSTRUCTIONS
-1. Use the tools above to gather information. Do not guess file contents.
-2. After receiving a tool result, respond with your answer in plain text.
-3. Only call another tool if the first result was insufficient.
-4. You cannot modify files. Only read and explore.
-5. Keep answers concise.`
+1. For knowledge questions (e.g. "how do I run this?", "what does X do?"), answer directly in plain text. Do NOT call tools for questions you can answer from general knowledge.
+2. For questions about specific files or code, use tools to read/search first. Do not guess file contents.
+3. After receiving a tool result, respond with your answer in plain text.
+4. Only call another tool if the first result was insufficient.
+5. You cannot modify files. Only read and explore.
+6. Keep answers concise.`
 
 // Strip <think>...</think> blocks that thinking-mode models (e.g. qwen3) may emit.
 // If stripping leaves nothing, return the content inside the tags instead.
