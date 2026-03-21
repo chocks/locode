@@ -277,9 +277,14 @@ Operation: ${step.operation}
 ${step.search ? `Target: ${step.search}` : ''}
 Reasoning: ${step.reasoning}
 ${fileSection}
-For "search": use an EXACT string from the file content above. It must match uniquely.
-For "content": the new text to insert or replace with.
-For "create" operations: "search" is not needed.
+IMPORTANT rules for each operation type:
+- "insert": "search" = exact line to insert AFTER. "content" = ONLY the new line(s) to add. Do NOT include existing file content.
+- "replace": "search" = exact text to replace. "content" = the replacement text (same scope as search).
+- "delete": "search" = exact text to remove. "content" is not needed.
+- "create": creates a new file. "content" = full file content. "search" is not needed.
+
+"search" must be an EXACT substring from the file. It must match uniquely (appear only once).
+"content" must NEVER contain the entire file — only the new or changed lines.
 
 Respond with ONLY a JSON object:
 { "file": "...", "operation": "...", "search": "...", "content": "..." }`
