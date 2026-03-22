@@ -39,8 +39,8 @@ describe('Planner', () => {
         steps: [{
           description: 'Add import',
           file: 'src/a.ts',
-          operation: 'insert',
-          search: 'export const x',
+          operation: 'patch',
+          patch: { before: 'export const x = 1', after: 'export const x = 2' },
           precondition: { fileHash: 'abc123' },
           reasoning: 'Need logger import',
         }],
@@ -57,6 +57,7 @@ describe('Planner', () => {
       expect(result.description).toBe('Add logging')
       expect(result.steps).toHaveLength(1)
       expect(result.steps[0].file).toBe('src/a.ts')
+      expect(result.steps[0].patch?.after).toBe('export const x = 2')
       expect(result.steps[0].precondition?.fileHash).toBe('abc123')
     })
 

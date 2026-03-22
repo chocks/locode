@@ -157,6 +157,21 @@ describe('CodeEditor', () => {
       expect(result.failed).toHaveLength(1)
       expect(result.failed[0].error).toContain('precondition')
     })
+
+    it('applies a patch operation for an exact before/after block', async () => {
+      const file = writeFixture('patch.ts', 'function a() {\n  return 1\n}\n')
+      const edits: EditOperation[] = [{
+        file,
+        operation: 'patch',
+        patch: {
+          before: 'function a() {\n  return 1\n}',
+          after: 'function a() {\n  return 2\n}',
+        },
+      }]
+      const result = await editor.applyEdits(edits)
+      expect(result.applied).toHaveLength(1)
+      expect(fs.readFileSync(file, 'utf8')).toContain('return 2')
+    })
   })
 
   describe('applyEdits — originals for rollback', () => {

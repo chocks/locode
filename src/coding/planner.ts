@@ -53,7 +53,8 @@ export class Planner {
 
 RULES:
 - Use "create" to make NEW files. Never insert/replace into an existing file to create something unrelated.
-- Use "insert" or "replace" ONLY when modifying existing code in a file (e.g. fixing a method, adding an import).
+- Use "insert", "replace", or "patch" ONLY when modifying existing code in a file (e.g. fixing a method, adding an import).
+- Prefer "patch" when you can express the change as an exact before/after code block replacement.
 - If the request is for something new (e.g. "write a hello world script"), create a new file.
 - If the request mentions a specific file or method, edit that file.
 
@@ -73,8 +74,9 @@ Respond with ONLY a JSON object:
     {
       "description": "what this step does",
       "file": "path/to/file",
-      "operation": "insert|replace|delete|create",
+      "operation": "insert|replace|delete|create|patch",
       "search": "exact text to find in file (only for insert/replace/delete)",
+      "patch": { "before": "exact old block", "after": "exact new block" },
       "reasoning": "why this change"
     }
   ],
@@ -140,6 +142,7 @@ Respond with ONLY the corrected JSON plan (same format as above).`
         file: s.file ?? '',
         operation: this.normalizeOperation(s.operation),
         search: s.search,
+        patch: s.patch,
         precondition: s.precondition,
         reasoning: s.reasoning ?? '',
       })),
@@ -147,11 +150,12 @@ Respond with ONLY the corrected JSON plan (same format as above).`
     }
   }
 
-  private normalizeOperation(op: string | undefined): 'insert' | 'replace' | 'delete' | 'create' {
-    const valid = ['insert', 'replace', 'delete', 'create']
-    if (op && valid.includes(op)) return op as 'insert' | 'replace' | 'delete' | 'create'
+  private normalizeOperation(op: string | undefined): 'insert' | 'replace' | 'delete' | 'create' | 'patch' {
+    const valid = ['insert', 'replace', 'delete', 'create', 'patch']
+    if (op && valid.includes(op)) return op as 'insert' | 'replace' | 'delete' | 'create' | 'patch'
     // Map common LLM mistakes to valid operations
     if (op === 'edit' || op === 'edit_file' || op === 'modify' || op === 'update') return 'replace'
+    if (op === 'diff' || op === 'block_replace') return 'patch'
     if (op === 'add' || op === 'append') return 'insert'
     if (op === 'write' || op === 'write_file' || op === 'new') return 'create'
     return 'replace'

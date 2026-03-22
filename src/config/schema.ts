@@ -41,6 +41,9 @@ export const PerformanceConfigSchema = z.object({
   lazy_semantic_search: z.boolean().default(true),
 })
 
+export const DEFAULT_RUNTIME_CONFIG = RuntimeConfigSchema.parse({})
+export const DEFAULT_PERFORMANCE_CONFIG = PerformanceConfigSchema.parse({})
+
 export const ConfigSchema = z.object({
   local_llm: z.object({
     provider: z.literal('ollama'),

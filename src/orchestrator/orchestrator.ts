@@ -2,7 +2,7 @@ import { Router, AgentType, RouteDecision } from './router'
 import { LocalAgent, AgentResult } from '../agents/local'
 import { ClaudeAgent, ClaudeAgentResult } from '../agents/claude'
 import { TokenTracker } from '../tracker/tracker'
-import type { Config } from '../config/schema'
+import { DEFAULT_RUNTIME_CONFIG, type Config } from '../config/schema'
 import { injectFileContext } from './file-context-injector'
 import { loadRepoContext } from './repo-context-loader'
 import { McpManager } from '../mcp/client'
@@ -57,11 +57,7 @@ export class Orchestrator {
     this.config = config
     this.router = new Router(config)
     this.taskClassifier = new TaskClassifier()
-    const runtimeConfig = {
-      artifacts_dir: config.runtime?.artifacts_dir ?? '.locode/runs',
-      approval_mode: config.runtime?.approval_mode ?? 'prompt',
-      classifier: config.runtime?.classifier ?? 'unified',
-    }
+    const runtimeConfig = { ...DEFAULT_RUNTIME_CONFIG, ...config.runtime }
     this.artifactStore = new RunArtifactStore(runtimeConfig.artifacts_dir)
     const registry = createDefaultRegistry()
     const safetyGate = new SafetyGate(config.safety)
