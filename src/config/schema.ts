@@ -27,6 +27,20 @@ export const AgentConfigSchema = z.object({
   validation_command: z.string().optional(),
 })
 
+export const RuntimeConfigSchema = z.object({
+  artifacts_dir: z.string().default('.locode/runs'),
+  approval_mode: z.enum(['prompt', 'auto', 'read-only']).default('prompt'),
+  classifier: z.enum(['unified', 'legacy']).default('unified'),
+})
+
+export const PerformanceConfigSchema = z.object({
+  parallel_reads: z.number().int().min(1).max(16).default(4),
+  warm_index_on_startup: z.boolean().default(true),
+  cache_context: z.boolean().default(true),
+  max_prompt_chars: z.number().int().positive().default(24000),
+  lazy_semantic_search: z.boolean().default(true),
+})
+
 export const ConfigSchema = z.object({
   local_llm: z.object({
     provider: z.literal('ollama'),
@@ -47,7 +61,7 @@ export const ConfigSchema = z.object({
     handoff: z.literal('summary'),
     max_summary_tokens: z.number(),
     max_file_bytes: z.number().int().positive().default(51200),
-    repo_context_files: z.array(z.string()).default(['CLAUDE.md']),
+    repo_context_files: z.array(z.string()).default(['AGENTS.md', 'CLAUDE.md']),
   }),
   token_tracking: z.object({
     enabled: z.boolean(),
@@ -58,6 +72,18 @@ export const ConfigSchema = z.object({
     auto_confirm: false,
     show_plan: true,
     run_validation: true,
+  }),
+  runtime: RuntimeConfigSchema.default({
+    artifacts_dir: '.locode/runs',
+    approval_mode: 'prompt',
+    classifier: 'unified',
+  }),
+  performance: PerformanceConfigSchema.default({
+    parallel_reads: 4,
+    warm_index_on_startup: true,
+    cache_context: true,
+    max_prompt_chars: 24000,
+    lazy_semantic_search: true,
   }),
   mcp_servers: z.record(z.string(), McpServerSchema).default({}),
   safety: z.object({
@@ -74,3 +100,4 @@ export const ConfigSchema = z.object({
 })
 
 export type Config = z.infer<typeof ConfigSchema>
+export type PerformanceConfig = z.infer<typeof PerformanceConfigSchema>

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events'
 import { execFileSync } from 'child_process'
+import crypto from 'crypto'
 import type { AgentResult } from '../agents/local'
 import type { ToolExecutor } from '../tools/executor'
 import type { CodeEditor } from '../editor/code-editor'
@@ -14,6 +15,7 @@ import type {
 import type { StreamEvent } from './stream'
 import type { Planner } from './planner'
 import type { AgentMemory } from './memory'
+import type { PerformanceConfig } from '../config/schema'
 
 interface LLMAgent {
   run(prompt: string, previousSummary?: string, repoContext?: string): Promise<AgentResult>
@@ -23,9 +25,13 @@ const MAX_ANALYZE_FILES = 5
 const MAX_FILE_TOKENS = 2000 // approximate chars
 
 export type ConfirmPlanFn = (plan: EditPlan) => Promise<boolean>
+export interface CodingAgentRunOptions {
+  preferredAgent?: 'local' | 'claude'
+}
 
 export class CodingAgent extends EventEmitter {
   private confirmPlan: ConfirmPlanFn | null = null
+  private contextCache = new Map<string, GatheredContext>()
 
   constructor(
     private localAgent: LLMAgent,
@@ -35,6 +41,7 @@ export class CodingAgent extends EventEmitter {
     private planner: Planner,
     private memory: AgentMemory,
     private config: AgentConfig,
+    private performance?: PerformanceConfig,
   ) {
     super()
   }
@@ -43,11 +50,11 @@ export class CodingAgent extends EventEmitter {
     this.confirmPlan = fn
   }
 
-  async run(prompt: string): Promise<AgentRunResult> {
+  async run(prompt: string, options?: CodingAgentRunOptions): Promise<AgentRunResult> {
     let totalInput = 0
     let totalOutput = 0
     let agentUsed: 'local' | 'claude' = 'local'
-    const initialOriginals = new Map<string, string>()
+    const initialOriginals = new Map<string, string | null>()
     let allEdits: EditOperation[] = []
     let allDiffs: string[] = []
     let currentPlan: EditPlan | null = null
@@ -60,7 +67,7 @@ export class CodingAgent extends EventEmitter {
       totalOutput += context.tokensUsed.output
 
       // === Determine agent for PLAN+EXECUTE ===
-      let planAgent: 'local' | 'claude' = 'local'
+      let planAgent: 'local' | 'claude' = options?.preferredAgent === 'claude' && this.claudeAgent ? 'claude' : 'local'
 
       for (let iteration = 1; iteration <= this.config.max_iterations; iteration++) {
         // === PLAN ===
@@ -70,7 +77,7 @@ export class CodingAgent extends EventEmitter {
           currentPlan = await this.planner.generatePlan(prompt, context.gathered, planAgent)
           // Auto-escalation: >2 files or >3 steps → Claude
           const uniqueFiles = new Set(currentPlan.steps.map(s => s.file))
-          if ((uniqueFiles.size > 2 || currentPlan.steps.length > 3) && this.claudeAgent) {
+          if (!options?.preferredAgent && (uniqueFiles.size > 2 || currentPlan.steps.length > 3) && this.claudeAgent) {
             planAgent = 'claude'
             currentPlan = await this.planner.generatePlan(prompt, context.gathered, planAgent)
           }
@@ -102,6 +109,7 @@ export class CodingAgent extends EventEmitter {
         totalInput += edits.tokensUsed.input
         totalOutput += edits.tokensUsed.output
 
+        const previews = await this.codeEditor.preview(edits.operations)
         const applyResult = await this.codeEditor.applyEdits(edits.operations)
 
         // Store initial originals (only from first iteration)
@@ -129,7 +137,6 @@ export class CodingAgent extends EventEmitter {
         }
 
         allEdits = [...allEdits, ...applyResult.applied]
-        const previews = await this.codeEditor.preview(applyResult.applied)
         allDiffs = previews.map(p => p.diff)
         for (const p of previews) {
           this.emit('stream', { type: 'diff', file: p.file, diff: p.diff } as StreamEvent)
@@ -173,22 +180,39 @@ export class CodingAgent extends EventEmitter {
     gathered: GatheredContext
     tokensUsed: { input: number; output: number }
   }> {
+    const cacheKey = this.getContextCacheKey(prompt)
+    if (this.performance?.cache_context && this.contextCache.has(cacheKey)) {
+      return {
+        gathered: this.contextCache.get(cacheKey)!,
+        tokensUsed: { input: 0, output: 0 },
+      }
+    }
+
     const files: GatheredContext['files'] = []
     const searchResults: GatheredContext['searchResults'] = []
 
     // Pre-read any files explicitly mentioned in the prompt
     const mentionedFiles = this.extractMentionedFiles(prompt)
-    for (const filePath of mentionedFiles) {
-      try {
-        const readResult = await this.toolExecutor.execute({ tool: 'read_file', args: { path: filePath } })
-        if (readResult.success) {
-          const truncated = readResult.output.slice(0, MAX_FILE_TOKENS * 4)
-          files.push({ path: filePath, content: truncated, relevance: 'mentioned in prompt' })
-          this.memory.record({ type: 'file_read', detail: filePath })
-          this.emit('stream', { type: 'tool_call', tool: 'read_file', args: { path: filePath } } as StreamEvent)
-        }
-      } catch {
-        // File doesn't exist — that's fine
+    const siblingTests = mentionedFiles.flatMap(filePath => this.findLikelyTestFiles(filePath))
+    const fastPathFiles = [...new Set([...mentionedFiles, ...siblingTests])]
+    const readCalls = fastPathFiles
+      .slice(0, this.performance?.parallel_reads ?? MAX_ANALYZE_FILES)
+      .map(filePath => ({ tool: 'read_file', args: { path: filePath } }))
+
+    const readResults = readCalls.length > 0
+      ? (await this.toolExecutor.executeParallel(readCalls)) ?? []
+      : []
+    for (const [index, readResult] of readResults.entries()) {
+      const filePath = readCalls[index].args.path as string
+      this.emit('stream', { type: 'tool_call', tool: 'read_file', args: { path: filePath } } as StreamEvent)
+      if (readResult.success) {
+        const truncated = this.truncateContent(readResult.output)
+        files.push({
+          path: filePath,
+          content: truncated,
+          relevance: mentionedFiles.includes(filePath) ? 'mentioned in prompt' : 'related test file',
+        })
+        this.memory.record({ type: 'file_read', detail: filePath })
       }
     }
 
@@ -212,7 +236,7 @@ export class CodingAgent extends EventEmitter {
         if (call.tool === 'read_file' && call.result?.success) {
           const filePath = call.args.path as string
           if (!files.some(f => f.path === filePath)) {
-            const truncated = (call.result.output ?? '').slice(0, MAX_FILE_TOKENS * 4)
+            const truncated = this.truncateContent(call.result.output ?? '')
             files.push({ path: filePath, content: truncated, relevance: 'analyzed' })
             this.memory.record({ type: 'file_read', detail: filePath })
           }
@@ -228,12 +252,17 @@ export class CodingAgent extends EventEmitter {
       }
     }
 
+    const gathered = {
+      files,
+      searchResults,
+      memory: this.memory.getSnapshot(),
+    }
+    if (this.performance?.cache_context) {
+      this.contextCache.set(cacheKey, gathered)
+    }
+
     return {
-      gathered: {
-        files,
-        searchResults,
-        memory: this.memory.getSnapshot(),
-      },
+      gathered,
       tokensUsed: { input: result.inputTokens, output: result.outputTokens },
     }
   }
@@ -251,6 +280,17 @@ export class CodingAgent extends EventEmitter {
       }
     }
     return [...new Set(files)]
+  }
+
+  private findLikelyTestFiles(filePath: string): string[] {
+    const match = filePath.match(/^(.*?)(\.[^.]+)$/)
+    if (!match) return []
+    const [, base, ext] = match
+    return [
+      `${base}.test${ext}`,
+      `${base}.spec${ext}`,
+      filePath.replace(/^src\//, 'tests/').replace(ext, `.test${ext}`),
+    ]
   }
 
   private async executeSteps(plan: EditPlan, agent: 'local' | 'claude', context: GatheredContext): Promise<{
@@ -295,6 +335,17 @@ Respond with ONLY a JSON object:
 
       try {
         const op = this.parseEditOperation(result.content, step.file)
+        const fileContent = context.files.find(f => f.path === step.file)?.content
+        if (fileContent && op.operation !== 'create') {
+          const precondition = { ...(step.precondition ?? {}), ...(op.precondition ?? {}) }
+          if (!precondition.fileHash && fileContent.length < (this.performance?.max_prompt_chars ?? MAX_FILE_TOKENS * 4)) {
+            precondition.fileHash = crypto.createHash('sha256').update(fileContent).digest('hex')
+          }
+          if (!precondition.mustContain && step.search) {
+            precondition.mustContain = [step.search]
+          }
+          op.precondition = precondition
+        }
         operations.push(op)
       } catch {
         operations.push({
@@ -302,6 +353,7 @@ Respond with ONLY a JSON object:
           operation: step.operation,
           search: step.search,
           content: '',
+          precondition: step.precondition ?? (step.search ? { mustContain: [step.search] } : undefined),
         })
       }
     }
@@ -313,7 +365,7 @@ Respond with ONLY a JSON object:
     // Try direct JSON parse
     try {
       const op = JSON.parse(response)
-      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, content: op.content }
+      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, content: op.content, precondition: op.precondition }
     } catch {
       // Fall through
     }
@@ -322,14 +374,14 @@ Respond with ONLY a JSON object:
     const match = response.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
     if (match) {
       const op = JSON.parse(match[1])
-      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, content: op.content }
+      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, content: op.content, precondition: op.precondition }
     }
 
     // Try finding JSON object
     const braceMatch = response.match(/\{[\s\S]*"operation"[\s\S]*\}/)
     if (braceMatch) {
       const op = JSON.parse(braceMatch[0])
-      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, content: op.content }
+      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, content: op.content, precondition: op.precondition }
     }
 
     throw new Error('Failed to parse edit operation from LLM response')
@@ -355,9 +407,21 @@ Respond with ONLY a JSON object:
     return snapshot.recentErrors
   }
 
-  private async rollbackAll(originals: Map<string, string>): Promise<void> {
+  private async rollbackAll(originals: Map<string, string | null>): Promise<void> {
     if (originals.size === 0) return
     await this.codeEditor.rollback({ applied: [], failed: [], originals })
+  }
+
+  private truncateContent(content: string): string {
+    const maxChars = Math.min(
+      this.performance?.max_prompt_chars ?? MAX_FILE_TOKENS * 4,
+      MAX_FILE_TOKENS * 4,
+    )
+    return content.slice(0, maxChars)
+  }
+
+  private getContextCacheKey(prompt: string): string {
+    return prompt.trim()
   }
 
   private buildResult(

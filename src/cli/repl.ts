@@ -124,8 +124,15 @@ export async function startRepl(config: Config, options?: { claudeOnly?: boolean
     try {
       let result: OrchestratorResult
 
+      orch.setApprovalHandler(async (call) => {
+        processing = false
+        const answer = await askQuestion(rl, `\n   Approve tool ${call.tool}? [y/N] `)
+        processing = true
+        return answer.trim().toLowerCase() === 'y'
+      })
+
       // Coding task — use streaming agent
-      if (orch.getCodingAgent() && orch.isCodingTask(input)) {
+      if (orch.getCodingAgent() && orch.classifyTask(input) === 'edit') {
         const codingAgent = orch.getCodingAgent()!
         codingAgent.setConfirmPlan(async (plan) => {
           console.log(`\nPlan: ${plan.steps.length} edit(s) across ${[...new Set(plan.steps.map(s => s.file))].join(', ')}`)

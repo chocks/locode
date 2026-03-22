@@ -104,7 +104,7 @@ describe('ConfigSchema', () => {
 
   it('defaults repo_context_files to ["CLAUDE.md"] when not provided', () => {
     const result = ConfigSchema.parse(baseConfig)
-    expect(result.context.repo_context_files).toEqual(['CLAUDE.md'])
+    expect(result.context.repo_context_files).toEqual(['AGENTS.md', 'CLAUDE.md'])
   })
 
   it('defaults safety config when omitted', () => {
@@ -125,5 +125,19 @@ describe('ConfigSchema', () => {
     })
     expect(result.safety.always_confirm).toEqual(['write_file'])
     expect(result.safety.allowed_write_paths).toEqual(['src', 'tests'])
+  })
+
+  it('defaults runtime config when omitted', () => {
+    const result = ConfigSchema.parse(baseConfig)
+    expect(result.runtime.artifacts_dir).toBe('.locode/runs')
+    expect(result.runtime.approval_mode).toBe('prompt')
+    expect(result.runtime.classifier).toBe('unified')
+  })
+
+  it('defaults performance config when omitted', () => {
+    const result = ConfigSchema.parse(baseConfig)
+    expect(result.performance.parallel_reads).toBe(4)
+    expect(result.performance.max_prompt_chars).toBe(24000)
+    expect(result.performance.lazy_semantic_search).toBe(true)
   })
 })

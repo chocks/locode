@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { createTwoFilesPatch } from 'diff'
 import type { SafetyGate } from '../tools/safety-gate'
 import type { EditOperation, ApplyResult, DiffPreview } from './types'
@@ -13,7 +14,7 @@ export class CodeEditor {
   async applyEdits(edits: EditOperation[]): Promise<ApplyResult> {
     const applied: EditOperation[] = []
     const failed: Array<{ edit: EditOperation; error: string }> = []
-    const originals = new Map<string, string>()
+    const originals = new Map<string, string | null>()
 
     for (const edit of edits) {
       try {
@@ -34,6 +35,8 @@ export class CodeEditor {
           // Store original if file existed
           if (fs.existsSync(resolved)) {
             originals.set(resolved, fs.readFileSync(resolved, 'utf8'))
+          } else if (!originals.has(resolved)) {
+            originals.set(resolved, null)
           }
           fs.writeFileSync(resolved, edit.content ?? '', 'utf8')
           applied.push(edit)
@@ -51,6 +54,7 @@ export class CodeEditor {
           originals.set(resolved, original)
         }
 
+        this.verifyPrecondition(original, edit)
         const modified = this.applyEdit(original, edit)
         fs.writeFileSync(resolved, modified, 'utf8')
         applied.push(edit)
@@ -64,7 +68,11 @@ export class CodeEditor {
 
   async rollback(result: ApplyResult): Promise<void> {
     for (const [filePath, original] of result.originals) {
-      fs.writeFileSync(filePath, original, 'utf8')
+      if (original === null) {
+        fs.rmSync(filePath, { force: true })
+      } else {
+        fs.writeFileSync(filePath, original, 'utf8')
+      }
     }
   }
 
@@ -86,6 +94,7 @@ export class CodeEditor {
 
       const original = fs.readFileSync(resolved, 'utf8')
       try {
+        this.verifyPrecondition(original, edit)
         const modified = this.applyEdit(original, edit)
         const diff = createTwoFilesPatch(edit.file, edit.file, original, modified)
         const lines = diff.split('\n')
@@ -110,6 +119,25 @@ export class CodeEditor {
       return this.applySearchEdit(content, edit)
     }
     return this.applyLineEdit(content, edit)
+  }
+
+  private verifyPrecondition(content: string, edit: EditOperation): void {
+    if (!edit.precondition) return
+
+    if (edit.precondition.fileHash) {
+      const hash = crypto.createHash('sha256').update(content).digest('hex')
+      if (hash !== edit.precondition.fileHash) {
+        throw new Error(`Edit precondition failed in ${edit.file}: file hash changed`)
+      }
+    }
+
+    if (edit.precondition.mustContain) {
+      for (const fragment of edit.precondition.mustContain) {
+        if (!content.includes(fragment)) {
+          throw new Error(`Edit precondition failed in ${edit.file}: required content missing`)
+        }
+      }
+    }
   }
 
   private applySearchEdit(content: string, edit: EditOperation): string {

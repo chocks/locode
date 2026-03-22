@@ -85,6 +85,44 @@ describe('ToolExecutor', () => {
       expect(result.success).toBe(false)
       expect(result.error).toContain('boom')
     })
+
+    it('blocks tools that require confirmation when no approval handler is set', async () => {
+      const tool = makeTool({
+        name: 'write_file',
+        category: 'write',
+        requiresConfirmation: true,
+      })
+      const executor = makeExecutor([tool])
+      const result = await executor.execute({ tool: 'write_file', args: { path: 'src/foo.ts' } })
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('confirmation')
+    })
+
+    it('executes tools that require confirmation after approval', async () => {
+      const tool = makeTool({
+        name: 'write_file',
+        category: 'write',
+        requiresConfirmation: true,
+      })
+      const executor = makeExecutor([tool])
+      executor.setApprovalHandler(vi.fn().mockResolvedValue(true))
+      const result = await executor.execute({ tool: 'write_file', args: { path: 'src/foo.ts' } })
+      expect(result.success).toBe(true)
+      expect(tool.handler).toHaveBeenCalled()
+    })
+
+    it('blocks execution when approval is denied', async () => {
+      const tool = makeTool({
+        name: 'write_file',
+        category: 'write',
+        requiresConfirmation: true,
+      })
+      const executor = makeExecutor([tool])
+      executor.setApprovalHandler(vi.fn().mockResolvedValue(false))
+      const result = await executor.execute({ tool: 'write_file', args: { path: 'src/foo.ts' } })
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('denied')
+    })
   })
 
   describe('executeParallel', () => {

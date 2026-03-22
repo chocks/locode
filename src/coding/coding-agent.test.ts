@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { CodingAgent } from './coding-agent'
 import type { AgentConfig, EditPlan } from './types'
 import { AgentMemory } from './memory'
+import type { PerformanceConfig } from '../config/schema'
 
 // Mock dependencies
 const mockLocalAgent = {
@@ -39,8 +40,16 @@ const defaultConfig: AgentConfig = {
   run_validation: false,
 }
 
+const defaultPerformance: PerformanceConfig = {
+  parallel_reads: 4,
+  warm_index_on_startup: true,
+  cache_context: true,
+  max_prompt_chars: 24000,
+  lazy_semantic_search: true,
+}
+
  
-function createAgent(config = defaultConfig): CodingAgent {
+function createAgent(config = defaultConfig, performance = defaultPerformance): CodingAgent {
   return new CodingAgent(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockLocalAgent as any,
@@ -54,6 +63,7 @@ function createAgent(config = defaultConfig): CodingAgent {
     mockPlanner as any,
     new AgentMemory(),
     config,
+    performance,
   )
 }
 
@@ -240,6 +250,43 @@ describe('CodingAgent', () => {
     expect(mockCodeEditor.rollback).toHaveBeenCalled()
   })
 
+  it('generates previews before applying edits so diffs reflect original content', async () => {
+    const agent = createAgent()
+
+    mockLocalAgent.run.mockResolvedValueOnce({
+      content: 'ok', summary: '', inputTokens: 30, outputTokens: 20,
+    })
+
+    mockPlanner.generatePlan.mockResolvedValue({
+      description: 'Update file',
+      steps: [{ description: 'Fix', file: 'a.ts', operation: 'replace', search: 'bad', reasoning: '' }],
+      estimatedFiles: ['a.ts'],
+    })
+
+    mockLocalAgent.run.mockResolvedValueOnce({
+      content: JSON.stringify({ file: 'a.ts', operation: 'replace', search: 'bad', content: 'good' }),
+      summary: '', inputTokens: 50, outputTokens: 30,
+    })
+
+    mockCodeEditor.preview.mockResolvedValue([{
+      file: 'a.ts',
+      diff: '-bad\n+good',
+      additions: 1,
+      deletions: 1,
+    }])
+    mockCodeEditor.applyEdits.mockResolvedValue({
+      applied: [{ file: 'a.ts', operation: 'replace', search: 'bad', content: 'good' }],
+      failed: [],
+      originals: new Map([['a.ts', 'bad']]),
+    })
+
+    await agent.run('Fix a.ts')
+
+    expect(mockCodeEditor.preview.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCodeEditor.applyEdits.mock.invocationCallOrder[0]
+    )
+  })
+
   it('emits stream events during execution', async () => {
     const agent = createAgent()
     const events: string[] = []
@@ -262,5 +309,47 @@ describe('CodingAgent', () => {
     await agent.run('test')
     expect(events).toContain('phase')
     expect(events).toContain('done')
+  })
+
+  it('reuses cached analyze context for repeated prompts when cache_context is enabled', async () => {
+    const agent = createAgent()
+
+    mockLocalAgent.run
+      .mockResolvedValueOnce({
+        content: 'analysis',
+        summary: '',
+        inputTokens: 30,
+        outputTokens: 20,
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ file: 'a.ts', operation: 'create', content: 'x' }),
+        summary: '',
+        inputTokens: 20,
+        outputTokens: 10,
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ file: 'a.ts', operation: 'create', content: 'x' }),
+        summary: '',
+        inputTokens: 20,
+        outputTokens: 10,
+      })
+
+    mockPlanner.generatePlan.mockResolvedValue({
+      description: 'Create file',
+      steps: [{ description: 'Create file', file: 'a.ts', operation: 'create', reasoning: '' }],
+      estimatedFiles: ['a.ts'],
+    })
+
+    mockCodeEditor.preview.mockResolvedValue([])
+    mockCodeEditor.applyEdits.mockResolvedValue({
+      applied: [{ file: 'a.ts', operation: 'create', content: 'x' }],
+      failed: [],
+      originals: new Map([['a.ts', null]]),
+    })
+
+    await agent.run('Create a.ts')
+    await agent.run('Create a.ts')
+
+    expect(mockLocalAgent.run).toHaveBeenCalledTimes(3)
   })
 })

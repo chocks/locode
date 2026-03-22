@@ -143,6 +143,20 @@ describe('CodeEditor', () => {
       expect(result.failed).toHaveLength(1)
       expect(result.failed[0].error).toContain('outside allowed')
     })
+
+    it('rejects edits when file hash precondition does not match', async () => {
+      const file = writeFixture('guarded.ts', 'const x = 1\n')
+      const edits: EditOperation[] = [{
+        file,
+        operation: 'replace',
+        search: 'const x = 1',
+        content: 'const x = 2',
+        precondition: { fileHash: 'stale-hash' },
+      }]
+      const result = await editor.applyEdits(edits)
+      expect(result.failed).toHaveLength(1)
+      expect(result.failed[0].error).toContain('precondition')
+    })
   })
 
   describe('applyEdits — originals for rollback', () => {
@@ -169,6 +183,19 @@ describe('CodeEditor', () => {
 
       await editor.rollback(result)
       expect(fs.readFileSync(file, 'utf8')).toBe('before\n')
+    })
+
+    it('deletes newly created files on rollback', async () => {
+      const file = path.join(tmpDir, 'created.ts')
+      const result = await editor.applyEdits([{
+        file,
+        operation: 'create',
+        content: 'export const created = true\n',
+      }])
+
+      expect(fs.existsSync(file)).toBe(true)
+      await editor.rollback(result)
+      expect(fs.existsSync(file)).toBe(false)
     })
   })
 

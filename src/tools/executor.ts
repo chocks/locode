@@ -8,14 +8,21 @@ export interface ToolCall {
   reason?: string
 }
 
+export type ApprovalHandler = (call: ToolCall) => Promise<boolean>
+
 export class ToolExecutor {
   readonly registry: ToolRegistry
+  private approvalHandler: ApprovalHandler | null = null
 
   constructor(
     registry: ToolRegistry,
     private safetyGate: SafetyGate,
   ) {
     this.registry = registry
+  }
+
+  setApprovalHandler(handler: ApprovalHandler | null): void {
+    this.approvalHandler = handler
   }
 
   async execute(call: ToolCall): Promise<ToolResult> {
@@ -31,11 +38,24 @@ export class ToolExecutor {
       return { success: false, output: '', error: validation.errors.join('; ') }
     }
 
+    const safetyDecision = this.safetyGate.check(call)
+
     // 3. Safety check — write path restriction for write-category tools
     if (tool.category === 'write' && call.args.path) {
       const pathCheck = this.safetyGate.checkWritePath(call.args.path as string)
       if (!pathCheck.allowed) {
         return { success: false, output: '', error: pathCheck.reason }
+      }
+    }
+
+    const needsConfirmation = tool.requiresConfirmation || safetyDecision.requiresConfirmation
+    if (needsConfirmation) {
+      if (!this.approvalHandler) {
+        return { success: false, output: '', error: `tool '${call.tool}' requires confirmation` }
+      }
+      const approved = await this.approvalHandler(call)
+      if (!approved) {
+        return { success: false, output: '', error: `confirmation denied for tool '${call.tool}'` }
       }
     }
 
