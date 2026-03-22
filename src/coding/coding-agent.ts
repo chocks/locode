@@ -322,12 +322,14 @@ IMPORTANT rules for each operation type:
 - "replace": "search" = exact text to replace. "content" = the replacement text (same scope as search).
 - "delete": "search" = exact text to remove. "content" is not needed.
 - "create": creates a new file. "content" = full file content. "search" is not needed.
+- "patch": "patch.before" = exact existing block. "patch.after" = exact replacement block.
 
 "search" must be an EXACT substring from the file. It must match uniquely (appear only once).
+"patch.before" must be an EXACT substring from the file. It must match uniquely.
 "content" must NEVER contain the entire file — only the new or changed lines.
 
 Respond with ONLY a JSON object:
-{ "file": "...", "operation": "...", "search": "...", "content": "..." }`
+{ "file": "...", "operation": "...", "search": "...", "content": "...", "patch": { "before": "...", "after": "..." } }`
 
       const result = await llm.run(stepPrompt)
       totalInput += result.inputTokens
@@ -341,7 +343,9 @@ Respond with ONLY a JSON object:
           if (!precondition.fileHash && fileContent.length < (this.performance?.max_prompt_chars ?? MAX_FILE_TOKENS * 4)) {
             precondition.fileHash = crypto.createHash('sha256').update(fileContent).digest('hex')
           }
-          if (!precondition.mustContain && step.search) {
+          if (!precondition.mustContain && step.patch?.before) {
+            precondition.mustContain = [step.patch.before]
+          } else if (!precondition.mustContain && step.search) {
             precondition.mustContain = [step.search]
           }
           op.precondition = precondition
@@ -352,8 +356,13 @@ Respond with ONLY a JSON object:
           file: step.file,
           operation: step.operation,
           search: step.search,
+          patch: step.patch,
           content: '',
-          precondition: step.precondition ?? (step.search ? { mustContain: [step.search] } : undefined),
+          precondition: step.precondition ?? (
+            step.patch?.before ? { mustContain: [step.patch.before] }
+              : step.search ? { mustContain: [step.search] }
+                : undefined
+          ),
         })
       }
     }
@@ -365,7 +374,7 @@ Respond with ONLY a JSON object:
     // Try direct JSON parse
     try {
       const op = JSON.parse(response)
-      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, content: op.content, precondition: op.precondition }
+      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, patch: op.patch, content: op.content, precondition: op.precondition }
     } catch {
       // Fall through
     }
@@ -374,14 +383,14 @@ Respond with ONLY a JSON object:
     const match = response.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
     if (match) {
       const op = JSON.parse(match[1])
-      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, content: op.content, precondition: op.precondition }
+      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, patch: op.patch, content: op.content, precondition: op.precondition }
     }
 
     // Try finding JSON object
     const braceMatch = response.match(/\{[\s\S]*"operation"[\s\S]*\}/)
     if (braceMatch) {
       const op = JSON.parse(braceMatch[0])
-      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, content: op.content, precondition: op.precondition }
+      return { file: op.file ?? fallbackFile, operation: op.operation, search: op.search, patch: op.patch, content: op.content, precondition: op.precondition }
     }
 
     throw new Error('Failed to parse edit operation from LLM response')
