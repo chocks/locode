@@ -2,8 +2,8 @@
 
 **Date:** 2026-03-10
 **Status:** Proposed
-**Scope:** Persistent codebase index, symbol parsing, embeddings, smart context retrieval
-**Depends on:** v0.3 (coding agent — agent loop, tool executor, code editor)
+**Scope:** Persistent codebase index, deterministic context retrieval, optional semantic search
+**Depends on:** v0.3.5 (agent hardening + performance)
 
 ---
 
@@ -17,9 +17,10 @@ Make the coding agent **repo-aware**. Instead of relying on the LLM to guess wha
 
 1. **Index once, query fast** — build index on first run, incrementally update on file changes
 2. **Tools, not magic** — codebase intelligence is exposed as tools the agent calls (fits v0.2's registry)
-3. **Pure JS** — web-tree-sitter (WASM) for parsing; **qmd** ([github.com/tobi/qmd](https://github.com/tobi/qmd)) for BM25 + vector semantic search, replacing a custom embedding store
-4. **Configurable scope** — user controls which dirs to index, which to ignore
-5. **Graceful degradation** — agent works without index (falls back to ripgrep), index just makes it faster
+3. **Fast path first** — exact path, symbol, git-local, and test-file retrieval happens before semantic search
+4. **Pure JS** — web-tree-sitter (WASM) for parsing; optional **qmd** ([github.com/tobi/qmd](https://github.com/tobi/qmd)) for BM25 + vector semantic search
+5. **Configurable scope** — user controls which dirs to index, which to ignore
+6. **Graceful degradation** — agent works without index (falls back to ripgrep), index just makes it faster
 
 ---
 
@@ -41,7 +42,7 @@ Make the coding agent **repo-aware**. Instead of relying on the LLM to guess wha
                     │  └──────────────────────┘  │
                     │                            │
                     │  ┌──────────────────────┐  │
-                    │  │ Embedding Index       │  │  ← semantic search
+                    │  │ Embedding Index       │  │  ← optional semantic search
                     │  │ vector, file, chunk   │  │
                     │  │ (qmd — BM25 + vector) │  │
                     │  └──────────────────────┘  │
@@ -55,11 +56,12 @@ Make the coding agent **repo-aware**. Instead of relying on the LLM to guess wha
                     ┌────────────▼───────────────┐
                     │   Context Retriever         │
                     │                            │
-                    │   1. Analyze query          │
+                    │   1. Exact path / mentions  │
                     │   2. Symbol search          │
-                    │   3. Semantic search        │
+                    │   3. Test + sibling files   │
                     │   4. Dependency walk        │
-                    │   5. Rank + truncate        │
+                    │   5. Semantic search (opt.) │
+                    │   6. Rank + truncate        │
                     │                            │
                     │   Output: GatheredContext   │
                     └────────────┬───────────────┘
@@ -79,7 +81,7 @@ src/
 │   ├── file-index.test.ts
 │   ├── symbol-index.ts                # Tree-sitter symbol extraction
 │   ├── symbol-index.test.ts
-│   ├── embedding-index.ts             # Thin adapter over qmd SDK (collection per repo)
+│   ├── embedding-index.ts             # Optional qmd adapter, enabled only when configured
 │   ├── embedding-index.test.ts
 │   ├── dependency-graph.ts            # Import/require graph builder
 │   ├── dependency-graph.test.ts
@@ -94,13 +96,13 @@ src/
 │   └── types.ts
 ├── tools/definitions/                  # NEW tools registered in v0.2 registry
 │   ├── symbol-lookup.ts               # Search symbol index
-│   ├── semantic-search.ts             # Search embedding index
+│   ├── semantic-search.ts             # Optional semantic search tool
 │   └── find-references.ts            # Find files that import/use a symbol
 ```
 
 **New files: 18** (including tests). **Modified: 3** (orchestrator.ts, config/schema.ts, locode.yaml).
 
-> **Note on `embedding-index.ts`:** Rather than a full custom vector store (~200 lines of Float32Array math + persistence), this file is a thin adapter (~60 lines) delegating to the qmd TypeScript SDK. qmd handles chunk storage, BM25 + vector hybrid search, incremental index updates, and on-disk persistence. See §8 for the integration decision.
+> **Note on `embedding-index.ts`:** Rather than a full custom vector store (~200 lines of Float32Array math + persistence), this file is a thin adapter (~60 lines) delegating to the qmd TypeScript SDK. qmd handles chunk storage, BM25 + vector hybrid search, incremental index updates, and on-disk persistence. See §9 for the integration decision.
 
 ---
 
@@ -302,6 +304,12 @@ export interface RetrievalConfig {
   max_files: number            // default: 5
   max_tokens_per_file: number  // default: 2000
   max_total_tokens: number     // default: 8000
+  strategy: 'deterministic-first' | 'semantic-first'
+}
+
+export interface RetrievedContext extends GatheredContext {
+  confidence: number
+  strategyUsed: Array<'mentioned-path' | 'recent-files' | 'symbol-index' | 'test-discovery' | 'dependency' | 'semantic-search'>
 }
 
 export class ContextRetriever {
@@ -312,13 +320,15 @@ export class ContextRetriever {
 
   /**
    * Smart context retrieval pipeline:
-   * 1. Extract keywords/symbols from query
-   * 2. Symbol index search
-   * 3. Semantic search (embeddings)
-   * 4. Dependency expansion (files that import matched files)
-   * 5. Rank by relevance, truncate to budget
+   * 1. Exact path and mentioned-file resolution
+   * 2. Recent file / recent edit fast path
+   * 3. Symbol index search
+   * 4. Test-file and sibling-file expansion
+   * 5. Dependency expansion (lightweight)
+   * 6. Semantic search only if confidence is still low
+   * 7. Rank by relevance, truncate to budget
    */
-  async retrieve(query: string): Promise<GatheredContext>
+  async retrieve(query: string): Promise<RetrievedContext>
 }
 ```
 
@@ -348,22 +358,23 @@ export class BudgetManager {
 
 ---
 
-## 6. Integration with v0.3 Agent
+## 6. Integration with v0.3.5 Agent
 
-The key integration point is the **ANALYZE phase** of the CodingAgent. In v0.3, ANALYZE asks the LLM what to search for. In v0.4, the `ContextRetriever` does most of the work before the LLM is involved:
+The key integration point is the **ANALYZE phase** of the CodingAgent. In v0.3, ANALYZE asks the LLM what to search for. In v0.3.5, deterministic fast paths are added. In v0.4, the `ContextRetriever` becomes the default path and the LLM asks for more context only when retrieval confidence is low:
 
 ```typescript
 // Modified ANALYZE phase in CodingAgent
 
 async analyze(prompt: string): Promise<GatheredContext> {
-  // v0.4: use ContextRetriever if index is available
+  // v0.4: use deterministic retrieval first if index is available
   if (this.indexer?.isIndexed()) {
     const smartContext = await this.contextRetriever.retrieve(prompt)
+    if (smartContext.confidence >= 0.7) return smartContext
     // LLM can still request additional tools if needed
-    return smartContext
+    return this.analyzeWithFallback(prompt, smartContext)
   }
 
-  // v0.3 fallback: LLM-driven search
+  // v0.3.5 fallback: deterministic fast path + bounded LLM search
   return this.analyzeFallback(prompt)
 }
 ```
@@ -393,7 +404,7 @@ const symbolLookupTool: ToolDefinition = {
 
 const semanticSearchTool: ToolDefinition = {
   name: 'semantic_search',
-  // qmd hybrid (BM25 + vector) makes this better than pure embedding similarity
+  // Optional: only enabled when semantic indexing is configured
   description: 'Find code by natural language description — uses keyword + semantic hybrid search',
   category: 'search',
   inputSchema: {
@@ -426,7 +437,6 @@ const IndexConfigSchema = z.object({
   languages: z.array(z.string()).default([
     'typescript', 'javascript', 'python', 'go', 'rust'
   ]),
-  embedding_model: z.string().default('nomic-embed-text'),
   chunk_size: z.number().default(50),  // lines per chunk
   storage_dir: z.string().default('.locode/index'),
   auto_update: z.boolean().default(true),  // re-index on file changes
@@ -436,6 +446,7 @@ const ContextRetrievalSchema = z.object({
   max_files: z.number().default(5),
   max_tokens_per_file: z.number().default(2000),
   max_total_tokens: z.number().default(8000),
+  strategy: z.enum(['deterministic-first', 'semantic-first']).default('deterministic-first'),
 })
 ```
 
@@ -457,7 +468,6 @@ index:
     - python
     - go
     - rust
-  embedding_model: nomic-embed-text
   chunk_size: 50
   storage_dir: .locode/index
   auto_update: true
@@ -466,11 +476,27 @@ context_retrieval:
   max_files: 5
   max_tokens_per_file: 2000
   max_total_tokens: 8000
+  strategy: deterministic-first
 ```
 
 ---
 
-## 8. External Dependencies
+## 8. Delivery Phases
+
+Ship v0.4 in phases instead of landing the whole retrieval stack at once:
+
+1. **v0.4a: deterministic retrieval core**
+   file index, symbol index, mentioned-file resolution, sibling tests, ranking, truncation
+2. **v0.4b: lightweight dependency hints**
+   import graph for expansion and better ranking
+3. **v0.4c: optional semantic search**
+   qmd integration only after measuring retrieval misses that deterministic methods do not solve
+
+This keeps the local-first UX snappy and avoids paying embedding/indexing cost before it is justified.
+
+---
+
+## 9. External Dependencies
 
 | Package | Purpose | Type |
 |---|---|---|
@@ -478,9 +504,9 @@ context_retrieval:
 | Tree-sitter language grammars | `.wasm` files for each language | Static assets |
 | `qmd` | BM25 + vector hybrid search, chunk storage, index persistence | npm package |
 
-### Why qmd instead of a custom embedding store
+### Why qmd is optional instead of mandatory
 
-The original plan called for a custom `EmbeddingIndex` using Ollama embeddings + brute-force cosine similarity on `Float32Array`s, with manual persistence to disk. **qmd** ([github.com/tobi/qmd](https://github.com/tobi/qmd)) replaces all of this:
+The original plan called for a custom `EmbeddingIndex` using Ollama embeddings + brute-force cosine similarity on `Float32Array`s, with manual persistence to disk. If semantic retrieval proves necessary, **qmd** ([github.com/tobi/qmd](https://github.com/tobi/qmd)) replaces all of this:
 
 | Concern | Custom approach | qmd |
 |---|---|---|
@@ -490,7 +516,7 @@ The original plan called for a custom `EmbeddingIndex` using Ollama embeddings +
 | Incremental updates | Custom change detection | Built-in (filesystem scan + hash) |
 | Lines of code owned | ~200 (vector math + storage) | ~60 (adapter only) |
 
-**Trade-off:** qmd bundles its own model runtime (`node-llama-cpp`) rather than reusing Ollama. This means a second local inference process during indexing, but it runs only on `locode index` — not during chat sessions. The `node-llama-cpp` dependency is pre-built (no native compilation step).
+**Trade-off:** qmd bundles its own model runtime (`node-llama-cpp`) rather than reusing Ollama. This adds startup and indexing cost, so semantic indexing should stay opt-in and lazy.
 
 **MCP server option:** qmd also ships as an MCP server. If the user runs `qmd serve`, the `EmbeddingIndex` adapter can use qmd's MCP transport instead of the SDK, keeping the indexer process separate. This is optional — the SDK path works for single-user local use.
 

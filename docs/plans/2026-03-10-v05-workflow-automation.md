@@ -2,8 +2,8 @@
 
 **Date:** 2026-03-10
 **Status:** Proposed
-**Scope:** Declarative workflow engine, milestone commands, state persistence, context curation for Claude
-**Depends on:** v0.3 (coding agent), v0.4 (codebase intelligence)
+**Scope:** Assisted workflow engine, milestone commands, checkpointed state persistence, context curation for Claude
+**Depends on:** v0.3.5 (agent hardening + performance), v0.4 (codebase intelligence)
 
 ---
 
@@ -18,8 +18,9 @@ Chain multiple coding agent runs into **automated workflows** — fetch tickets,
 1. **Fixed state machines, not free-form planning** — small LLMs are unreliable planners; workflows are deterministic step sequences
 2. **LLM fills args, not decides steps** — the workflow engine controls what happens next; the LLM decides how (tool arguments, code changes)
 3. **Claude receives curated context** — local LLM + codebase index gather context; Claude gets a focused `ContextBundle` and returns `FileChange[]`
-4. **Resumable** — workflow state persists to disk; interrupted workflows resume where they left off
-5. **MCP-native project management** — Linear, GitHub, etc. via MCP servers; no provider abstraction layer
+4. **Checkpointed by default** — branch creation, push, PR, and ticket mutation pause for approval unless the user explicitly opts into full automation
+5. **Resumable** — workflow state persists to disk; interrupted workflows resume where they left off
+6. **MCP-native project management** — Linear, GitHub, etc. via MCP servers; no provider abstraction layer
 
 ---
 
@@ -42,9 +43,10 @@ Chain multiple coding agent runs into **automated workflows** — fetch tickets,
 │  │                      │────►│                  │              │
 │  │  1. Set agent        │     │  • persist state  │              │
 │  │  2. Restrict tools   │     │  • resume support │              │
-│  │  3. Execute          │◄────│  • error recovery │              │
-│  │  4. Capture output   │     └──────────────────┘              │
-│  │  5. Pass to next     │                                        │
+│  │  3. Checkpoint       │     │  • artifact links  │              │
+│  │  4. Execute          │◄────│  • error recovery │              │
+│  │  5. Capture output   │     └──────────────────┘              │
+│  │  6. Pass to next     │                                        │
 │  └──────────┬──────────┘                                        │
 │             │                                                    │
 │     ┌───────┴────────┐                                          │
@@ -55,11 +57,12 @@ Chain multiple coding agent runs into **automated workflows** — fetch tickets,
 │  • create branch  • fix test failures                           │
 │  • gather context • complex refactoring                         │
 │  • run tests                                                     │
-│  • commit + push                                                │
-│  • create PR                                                     │
+│  • commit                                                        │
+│  • push (checkpointed)                                           │
+│  • create PR (checkpointed)                                      │
 │  • update ticket                                                │
 │                                                                  │
-│  Uses: CodingAgent (v0.3), ContextRetriever (v0.4),            │
+│  Uses: CodingAgent (v0.3.5+), ContextRetriever (v0.4),         │
 │        ToolExecutor (v0.2), MCP servers                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -93,6 +96,8 @@ src/
 
 **New files: 14** (including tests). **Modified: 4** (index.ts, orchestrator.ts, config/schema.ts, locode.yaml).
 
+> **Safety note:** v0.5 assumes the v0.3.5 runtime artifact store, approval policy, and rollback model exist. Workflow automation should not bypass those layers.
+
 ---
 
 ## 5. TypeScript Interfaces
@@ -113,6 +118,7 @@ export interface WorkflowStepDef {
   agent: 'local' | 'claude' | 'coding-agent'  // coding-agent uses the v0.3 CodingAgent
   description: string
   tools?: string[]                    // restrict available tools for this step
+  checkpoint?: 'never' | 'before' | 'after'
   input?: string                      // reference to previous step output key
   output?: string                     // key to store result
   on_failure?: 'stop' | 'retry' | string  // step id to jump to
@@ -125,6 +131,7 @@ export interface WorkflowInstance {
   status: 'running' | 'paused' | 'completed' | 'failed'
   currentStep: number
   stepResults: Map<string, StepResult>
+  artifactDir: string
   params: Record<string, unknown>     // initial parameters
   startedAt: number
   updatedAt: number
@@ -135,6 +142,7 @@ export interface StepResult {
   status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
   output?: unknown
   error?: string
+  approvalRequired?: boolean
   tokensUsed: { input: number; output: number }
   durationMs: number
 }
@@ -170,6 +178,9 @@ export class WorkflowEngine {
 
   /** Cancel a running workflow */
   async cancel(workflowId: string): Promise<void>
+
+  /** Approve a paused checkpoint and continue */
+  async approve(workflowId: string): Promise<WorkflowInstance>
 }
 ```
 
@@ -258,6 +269,42 @@ export class ContextCache {
 ---
 
 ## 6. Workflow Templates
+
+Built-in templates should be **assisted** by default:
+
+- `feature-ticket`
+  checkpoints before branch creation, before commit, before push, before PR creation
+- `bugfix`
+  checkpoints before commit and before PR creation
+- `test-fix`
+  no remote git operations unless explicitly enabled
+
+Templates can opt into fewer checkpoints, but the default product posture should favor user trust over full autonomy.
+
+---
+
+## 7. Performance Notes
+
+Workflow performance matters because repeated slow startup costs make automation feel worse than manual execution. v0.5 should therefore:
+
+- reuse the v0.3.5 run artifact store instead of recomputing context between steps
+- cache curated context bundles keyed by task + file hashes
+- avoid re-running full retrieval if only workflow metadata changed
+- prefer targeted validation commands between steps and reserve full test runs for explicit gates
+- stream step progress immediately so long-running local operations still feel responsive
+
+---
+
+## 8. Recommended Rollout
+
+Ship workflow automation in this order:
+
+1. local-only milestone commands with checkpoints
+2. Claude-assisted implementation steps with artifact capture
+3. resumable state and context cache
+4. remote git operations (`push`, PR creation) behind explicit opt-in
+
+This keeps v0.5 developer-friendly and safe while still moving toward end-to-end automation.
 
 ### 6.1 Default Milestone Template
 
