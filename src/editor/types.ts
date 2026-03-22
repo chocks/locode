@@ -3,11 +3,18 @@ export interface EditPrecondition {
   mustContain?: string[]
 }
 
+export interface EditPatch {
+  before: string
+  after: string
+}
+
 export interface EditOperation {
   file: string
-  operation: 'insert' | 'replace' | 'delete' | 'create'
+  operation: 'insert' | 'replace' | 'delete' | 'create' | 'patch'
   // Search-based addressing (preferred — LLMs are bad at line counting)
   search?: string
+  // Minimal patch-style addressing for exact block replacement
+  patch?: EditPatch
   // Line-based addressing (fallback)
   afterLine?: number
   startLine?: number

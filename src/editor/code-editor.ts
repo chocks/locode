@@ -114,6 +114,9 @@ export class CodeEditor {
   }
 
   private applyEdit(content: string, edit: EditOperation): string {
+    if (edit.patch) {
+      return this.applyPatchEdit(content, edit)
+    }
     // Search-based takes precedence
     if (edit.search !== undefined) {
       return this.applySearchEdit(content, edit)
@@ -173,6 +176,20 @@ export class CodeEditor {
       default:
         throw new Error(`Unsupported operation with search: ${edit.operation}`)
     }
+  }
+
+  private applyPatchEdit(content: string, edit: EditOperation): string {
+    const patch = edit.patch!
+    const occurrences = content.split(patch.before).length - 1
+
+    if (occurrences === 0) {
+      throw new Error(`Patch block not found in ${edit.file}`)
+    }
+    if (occurrences > 1) {
+      throw new Error(`Patch block matches multiple locations (${occurrences}) in ${edit.file}`)
+    }
+
+    return content.replace(patch.before, patch.after)
   }
 
   private applyLineEdit(content: string, edit: EditOperation): string {

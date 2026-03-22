@@ -17,8 +17,12 @@ export interface EditPlan {
 export interface EditStep {
   description: string
   file: string
-  operation: 'insert' | 'replace' | 'delete' | 'create'
+  operation: 'insert' | 'replace' | 'delete' | 'create' | 'patch'
   search?: string
+  patch?: {
+    before: string
+    after: string
+  }
   precondition?: {
     fileHash?: string
     mustContain?: string[]
