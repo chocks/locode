@@ -3,6 +3,7 @@ import { CodingAgent } from './coding-agent'
 import type { AgentConfig, EditPlan } from './types'
 import { AgentMemory } from './memory'
 import type { PerformanceConfig } from '../config/schema'
+import { PersistentContextCache } from '../runtime/persistent-context-cache'
 
 // Mock dependencies
 const mockLocalAgent = {
@@ -44,12 +45,13 @@ const defaultPerformance: PerformanceConfig = {
   parallel_reads: 4,
   warm_index_on_startup: true,
   cache_context: true,
+  cache_dir: '.locode/context-cache',
   max_prompt_chars: 24000,
   lazy_semantic_search: true,
 }
 
  
-function createAgent(config = defaultConfig, performance = defaultPerformance): CodingAgent {
+function createAgent(config = defaultConfig, performance = defaultPerformance, persistentCache?: PersistentContextCache | null): CodingAgent {
   return new CodingAgent(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockLocalAgent as any,
@@ -64,6 +66,7 @@ function createAgent(config = defaultConfig, performance = defaultPerformance): 
     new AgentMemory(),
     config,
     performance,
+    persistentCache ?? null,
   )
 }
 

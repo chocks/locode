@@ -137,6 +137,7 @@ describe('ConfigSchema', () => {
   it('defaults performance config when omitted', () => {
     const result = ConfigSchema.parse(baseConfig)
     expect(result.performance.parallel_reads).toBe(4)
+    expect(result.performance.cache_dir).toBe('.locode/context-cache')
     expect(result.performance.max_prompt_chars).toBe(24000)
     expect(result.performance.lazy_semantic_search).toBe(true)
   })

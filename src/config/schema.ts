@@ -37,6 +37,7 @@ export const PerformanceConfigSchema = z.object({
   parallel_reads: z.number().int().min(1).max(16).default(4),
   warm_index_on_startup: z.boolean().default(true),
   cache_context: z.boolean().default(true),
+  cache_dir: z.string().default('.locode/context-cache'),
   max_prompt_chars: z.number().int().positive().default(24000),
   lazy_semantic_search: z.boolean().default(true),
 })
@@ -85,6 +86,7 @@ export const ConfigSchema = z.object({
     parallel_reads: 4,
     warm_index_on_startup: true,
     cache_context: true,
+    cache_dir: '.locode/context-cache',
     max_prompt_chars: 24000,
     lazy_semantic_search: true,
   }),
