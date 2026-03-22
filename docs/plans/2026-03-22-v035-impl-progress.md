@@ -2,8 +2,8 @@
 
 **Started:** 2026-03-22
 **Design:** [v0.3.5 Agent Hardening + Performance](2026-03-22-v035-agent-hardening-performance.md)
-**Current branch:** `feat/v035-agent-hardening`
-**Checkpoint commit:** `f33bd78` (`feat: harden coding agent runtime`)
+**Current branch:** `feat/v035-minimal-patch`
+**Checkpoint commit:** `ea2d44f` (`feat: add minimal patch edit support`)
 **Approach:** Incremental slices with clean commit checkpoints
 
 ---
@@ -12,6 +12,8 @@
 
 ### Completed in current checkpoint
 
+- Minimal `patch` edit operation added:
+  exact `{ before, after }` block replacement
 - Unified task classification via `TaskClassifier`
 - Real tool approval enforcement in `ToolExecutor`
 - REPL approval prompts wired into runtime
@@ -31,6 +33,7 @@
 - Editor rollback now deletes newly created files
 - Edit preconditions added:
   `fileHash`, `mustContain`
+- Planner, coding-agent, and editor now understand the minimal `patch` edit shape
 - Planner preserves edit preconditions in plan parsing
 - Coding agent attaches lightweight preconditions to generated edits
 - Coding agent is rebuilt after MCP tool registration so coding-mode sees updated tools
@@ -43,7 +46,7 @@
 
 ### Known non-goals / not finished yet
 
-- True patch/hunk-based edit model
+- Full patch/hunk-based edit model beyond exact block replacement
 - Persistent cross-run context cache
 - Rich artifact replay tooling / run viewer
 - Whole-run prompt budgeting beyond current per-file truncation
@@ -81,7 +84,7 @@
 
 ## Recommended Next Slice
 
-1. Replace guarded search-based edits with a true patch/hunk model
+1. Replace the current minimal exact-block `patch` edit with a true patch/hunk model
 2. Persist context cache across runs using file hashes
 3. Expand artifacts into a replay/debug bundle
 4. Add prompt-budget accounting at the run level, not just content truncation
@@ -91,5 +94,6 @@
 ## Resume Notes
 
 - Branch is safe to continue from directly
+- Current PR for the follow-up patch slice: `#55`
 - The current commit is a good PR checkpoint if needed
-- If resuming later, start with the patch/hunk edit model; that is the biggest remaining safety improvement in `v0.3.5`
+- If resuming later, start with the true patch/hunk edit model; that is the biggest remaining safety improvement in `v0.3.5`
