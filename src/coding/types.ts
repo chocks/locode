@@ -20,8 +20,7 @@ export interface EditStep {
   operation: 'insert' | 'replace' | 'delete' | 'create' | 'patch'
   search?: string
   patch?: {
-    before: string
-    after: string
+    unifiedDiff: string
   }
   precondition?: {
     fileHash?: string

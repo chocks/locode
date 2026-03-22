@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
-import { createTwoFilesPatch } from 'diff'
+import { applyPatch, createTwoFilesPatch } from 'diff'
 import type { SafetyGate } from '../tools/safety-gate'
 import type { EditOperation, ApplyResult, DiffPreview } from './types'
 
@@ -180,16 +180,11 @@ export class CodeEditor {
 
   private applyPatchEdit(content: string, edit: EditOperation): string {
     const patch = edit.patch!
-    const occurrences = content.split(patch.before).length - 1
-
-    if (occurrences === 0) {
-      throw new Error(`Patch block not found in ${edit.file}`)
+    const modified = applyPatch(content, patch.unifiedDiff)
+    if (modified === false) {
+      throw new Error(`Unified patch could not be applied to ${edit.file}`)
     }
-    if (occurrences > 1) {
-      throw new Error(`Patch block matches multiple locations (${occurrences}) in ${edit.file}`)
-    }
-
-    return content.replace(patch.before, patch.after)
+    return modified
   }
 
   private applyLineEdit(content: string, edit: EditOperation): string {

@@ -13,7 +13,7 @@
 ### Completed in current checkpoint
 
 - Minimal `patch` edit operation added:
-  exact `{ before, after }` block replacement
+  unified diff based patch application with real hunks via the existing `diff` library
 - Unified task classification via `TaskClassifier`
 - Real tool approval enforcement in `ToolExecutor`
 - REPL approval prompts wired into runtime
@@ -33,7 +33,7 @@
 - Editor rollback now deletes newly created files
 - Edit preconditions added:
   `fileHash`, `mustContain`
-- Planner, coding-agent, and editor now understand the minimal `patch` edit shape
+- Planner, coding-agent, and editor now understand a unified-diff `patch` edit shape
 - Planner preserves edit preconditions in plan parsing
 - Coding agent attaches lightweight preconditions to generated edits
 - Coding agent is rebuilt after MCP tool registration so coding-mode sees updated tools
@@ -46,7 +46,7 @@
 
 ### Known non-goals / not finished yet
 
-- Full patch/hunk-based edit model beyond exact block replacement
+- Smarter patch generation/validation still needed, but runtime patch application is now hunk-based
 - Persistent cross-run context cache
 - Rich artifact replay tooling / run viewer
 - Whole-run prompt budgeting beyond current per-file truncation
@@ -84,10 +84,10 @@
 
 ## Recommended Next Slice
 
-1. Replace the current minimal exact-block `patch` edit with a true patch/hunk model
-2. Persist context cache across runs using file hashes
-3. Expand artifacts into a replay/debug bundle
-4. Add prompt-budget accounting at the run level, not just content truncation
+1. Persist context cache across runs using file hashes
+2. Expand artifacts into a replay/debug bundle
+3. Add prompt-budget accounting at the run level, not just content truncation
+4. Improve patch-generation robustness and fallback behavior
 
 ---
 
@@ -96,4 +96,4 @@
 - Branch is safe to continue from directly
 - Current PR for the follow-up patch slice: `#55`
 - The current commit is a good PR checkpoint if needed
-- If resuming later, start with the true patch/hunk edit model; that is the biggest remaining safety improvement in `v0.3.5`
+- If resuming later, focus on patch-generation robustness and persistent cache next

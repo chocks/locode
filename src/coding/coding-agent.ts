@@ -322,14 +322,14 @@ IMPORTANT rules for each operation type:
 - "replace": "search" = exact text to replace. "content" = the replacement text (same scope as search).
 - "delete": "search" = exact text to remove. "content" is not needed.
 - "create": creates a new file. "content" = full file content. "search" is not needed.
-- "patch": "patch.before" = exact existing block. "patch.after" = exact replacement block.
+- "patch": "patch.unifiedDiff" = a valid unified diff for this single file. It may contain multiple hunks.
 
 "search" must be an EXACT substring from the file. It must match uniquely (appear only once).
-"patch.before" must be an EXACT substring from the file. It must match uniquely.
+"patch.unifiedDiff" must apply cleanly to the current file content.
 "content" must NEVER contain the entire file — only the new or changed lines.
 
 Respond with ONLY a JSON object:
-{ "file": "...", "operation": "...", "search": "...", "content": "...", "patch": { "before": "...", "after": "..." } }`
+{ "file": "...", "operation": "...", "search": "...", "content": "...", "patch": { "unifiedDiff": "--- a/file\\n+++ b/file\\n@@ ..." } }`
 
       const result = await llm.run(stepPrompt)
       totalInput += result.inputTokens
@@ -343,9 +343,7 @@ Respond with ONLY a JSON object:
           if (!precondition.fileHash && fileContent.length < (this.performance?.max_prompt_chars ?? MAX_FILE_TOKENS * 4)) {
             precondition.fileHash = crypto.createHash('sha256').update(fileContent).digest('hex')
           }
-          if (!precondition.mustContain && step.patch?.before) {
-            precondition.mustContain = [step.patch.before]
-          } else if (!precondition.mustContain && step.search) {
+          if (!precondition.mustContain && step.search) {
             precondition.mustContain = [step.search]
           }
           op.precondition = precondition
@@ -359,8 +357,7 @@ Respond with ONLY a JSON object:
           patch: step.patch,
           content: '',
           precondition: step.precondition ?? (
-            step.patch?.before ? { mustContain: [step.patch.before] }
-              : step.search ? { mustContain: [step.search] }
+            step.search ? { mustContain: [step.search] }
                 : undefined
           ),
         })
