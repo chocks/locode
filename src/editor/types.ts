@@ -4,8 +4,7 @@ export interface EditPrecondition {
 }
 
 export interface EditPatch {
-  before: string
-  after: string
+  unifiedDiff: string
 }
 
 export interface EditOperation {

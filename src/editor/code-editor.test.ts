@@ -5,6 +5,7 @@ import type { EditOperation } from './types'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import { createTwoFilesPatch } from 'diff'
 
 describe('CodeEditor', () => {
   let editor: CodeEditor
@@ -158,19 +159,19 @@ describe('CodeEditor', () => {
       expect(result.failed[0].error).toContain('precondition')
     })
 
-    it('applies a patch operation for an exact before/after block', async () => {
-      const file = writeFixture('patch.ts', 'function a() {\n  return 1\n}\n')
+    it('applies a patch operation using a unified diff with hunks', async () => {
+      const original = 'function a() {\n  return 1\n}\n\nfunction b() {\n  return 2\n}\n'
+      const updated = 'function a() {\n  return 10\n}\n\nfunction b() {\n  return 20\n}\n'
+      const file = writeFixture('patch.ts', original)
+      const unifiedDiff = createTwoFilesPatch(file, file, original, updated)
       const edits: EditOperation[] = [{
         file,
         operation: 'patch',
-        patch: {
-          before: 'function a() {\n  return 1\n}',
-          after: 'function a() {\n  return 2\n}',
-        },
+        patch: { unifiedDiff },
       }]
       const result = await editor.applyEdits(edits)
       expect(result.applied).toHaveLength(1)
-      expect(fs.readFileSync(file, 'utf8')).toContain('return 2')
+      expect(fs.readFileSync(file, 'utf8')).toBe(updated)
     })
   })
 

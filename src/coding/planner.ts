@@ -54,7 +54,7 @@ export class Planner {
 RULES:
 - Use "create" to make NEW files. Never insert/replace into an existing file to create something unrelated.
 - Use "insert", "replace", or "patch" ONLY when modifying existing code in a file (e.g. fixing a method, adding an import).
-- Prefer "patch" when you can express the change as an exact before/after code block replacement.
+- Prefer "patch" when you can express the change as a unified diff with one or more hunks.
 - If the request is for something new (e.g. "write a hello world script"), create a new file.
 - If the request mentions a specific file or method, edit that file.
 
@@ -76,7 +76,7 @@ Respond with ONLY a JSON object:
       "file": "path/to/file",
       "operation": "insert|replace|delete|create|patch",
       "search": "exact text to find in file (only for insert/replace/delete)",
-      "patch": { "before": "exact old block", "after": "exact new block" },
+      "patch": { "unifiedDiff": "--- a/file\\n+++ b/file\\n@@ ..." },
       "reasoning": "why this change"
     }
   ],

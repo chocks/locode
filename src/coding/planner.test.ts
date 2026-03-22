@@ -40,7 +40,7 @@ describe('Planner', () => {
           description: 'Add import',
           file: 'src/a.ts',
           operation: 'patch',
-          patch: { before: 'export const x = 1', after: 'export const x = 2' },
+          patch: { unifiedDiff: '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-export const x = 1\n+export const x = 2\n' },
           precondition: { fileHash: 'abc123' },
           reasoning: 'Need logger import',
         }],
@@ -57,7 +57,7 @@ describe('Planner', () => {
       expect(result.description).toBe('Add logging')
       expect(result.steps).toHaveLength(1)
       expect(result.steps[0].file).toBe('src/a.ts')
-      expect(result.steps[0].patch?.after).toBe('export const x = 2')
+      expect(result.steps[0].patch?.unifiedDiff).toContain('@@')
       expect(result.steps[0].precondition?.fileHash).toBe('abc123')
     })
 
