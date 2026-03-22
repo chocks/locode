@@ -16,6 +16,7 @@ import type { StreamEvent } from './stream'
 import type { Planner } from './planner'
 import type { AgentMemory } from './memory'
 import type { PerformanceConfig } from '../config/schema'
+import { PersistentContextCache } from '../runtime/persistent-context-cache'
 
 interface LLMAgent {
   run(prompt: string, previousSummary?: string, repoContext?: string): Promise<AgentResult>
@@ -42,6 +43,7 @@ export class CodingAgent extends EventEmitter {
     private memory: AgentMemory,
     private config: AgentConfig,
     private performance?: PerformanceConfig,
+    private persistentCache: PersistentContextCache | null = null,
   ) {
     super()
   }
@@ -187,6 +189,16 @@ export class CodingAgent extends EventEmitter {
         tokensUsed: { input: 0, output: 0 },
       }
     }
+    if (this.performance?.cache_context && this.persistentCache) {
+      const cached = await this.persistentCache.get(prompt)
+      if (cached) {
+        this.contextCache.set(cacheKey, cached)
+        return {
+          gathered: cached,
+          tokensUsed: { input: 0, output: 0 },
+        }
+      }
+    }
 
     const files: GatheredContext['files'] = []
     const searchResults: GatheredContext['searchResults'] = []
@@ -259,6 +271,9 @@ export class CodingAgent extends EventEmitter {
     }
     if (this.performance?.cache_context) {
       this.contextCache.set(cacheKey, gathered)
+      if (this.persistentCache) {
+        await this.persistentCache.set(prompt, gathered)
+      }
     }
 
     return {

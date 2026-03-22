@@ -16,6 +16,7 @@ import { CodeEditor } from '../editor/code-editor'
 import { TaskClassifier, type TaskIntent } from './task-classifier'
 import { RunArtifactStore } from '../runtime/run-artifact-store'
 import type { ApprovalHandler } from '../tools/executor'
+import { PersistentContextCache } from '../runtime/persistent-context-cache'
 
 function isRateLimitError(err: unknown): boolean {
   return err instanceof Error && 'status' in err && (err as { status: number }).status === 429
@@ -52,6 +53,7 @@ export class Orchestrator {
   private codingAgent: CodingAgent | null = null
   private taskClassifier: TaskClassifier
   private artifactStore: RunArtifactStore
+  private persistentContextCache: PersistentContextCache
 
   constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent, options?: OrchestratorOptions) {
     this.config = config
@@ -59,6 +61,7 @@ export class Orchestrator {
     this.taskClassifier = new TaskClassifier()
     const runtimeConfig = { ...DEFAULT_RUNTIME_CONFIG, ...config.runtime }
     this.artifactStore = new RunArtifactStore(runtimeConfig.artifacts_dir)
+    this.persistentContextCache = new PersistentContextCache(config.performance?.cache_dir ?? '.locode/context-cache')
     const registry = createDefaultRegistry()
     const safetyGate = new SafetyGate(config.safety)
     this.toolExecutor = new ToolExecutor(registry, safetyGate)
@@ -313,6 +316,7 @@ export class Orchestrator {
       agentMemory,
       this.config.agent,
       this.config.performance,
+      this.persistentContextCache,
     )
   }
 

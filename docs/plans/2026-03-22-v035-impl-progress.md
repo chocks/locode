@@ -2,8 +2,8 @@
 
 **Started:** 2026-03-22
 **Design:** [v0.3.5 Agent Hardening + Performance](2026-03-22-v035-agent-hardening-performance.md)
-**Current branch:** `feat/v035-minimal-patch`
-**Checkpoint commit:** `ea2d44f` (`feat: add minimal patch edit support`)
+**Current branch:** `feat/v035-persistent-context-cache`
+**Checkpoint commit:** `in progress`
 **Approach:** Incremental slices with clean commit checkpoints
 
 ---
@@ -27,6 +27,8 @@
   preview-before-apply flow for more trustworthy diffs
 - Coding agent now:
   basic in-memory analyze-context cache
+- Coding agent now:
+  can persist analyze-context cache across runs using file hashes
 - Run artifact storage added under `.locode/runs`
 - Artifact store now writes:
   `run.json`, `prompt.txt`, `content.txt`, `summary.txt`, optional `metadata.json`
@@ -47,7 +49,6 @@
 ### Known non-goals / not finished yet
 
 - Smarter patch generation/validation still needed, but runtime patch application is now hunk-based
-- Persistent cross-run context cache
 - Rich artifact replay tooling / run viewer
 - Whole-run prompt budgeting beyond current per-file truncation
 - Workflow intent integration beyond classification
@@ -84,10 +85,10 @@
 
 ## Recommended Next Slice
 
-1. Persist context cache across runs using file hashes
-2. Expand artifacts into a replay/debug bundle
-3. Add prompt-budget accounting at the run level, not just content truncation
-4. Improve patch-generation robustness and fallback behavior
+1. Expand artifacts into a replay/debug bundle
+2. Add prompt-budget accounting at the run level, not just content truncation
+3. Improve patch-generation robustness and fallback behavior
+4. Tighten cache eviction/cleanup policy if the on-disk cache grows too much
 
 ---
 
@@ -96,4 +97,4 @@
 - Branch is safe to continue from directly
 - Current PR for the follow-up patch slice: `#55`
 - The current commit is a good PR checkpoint if needed
-- If resuming later, focus on patch-generation robustness and persistent cache next
+- If resuming later, focus on patch-generation robustness and richer artifact tooling next
