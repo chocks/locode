@@ -1,3 +1,8 @@
+export interface EditPrecondition {
+  fileHash?: string
+  mustContain?: string[]
+}
+
 export interface EditOperation {
   file: string
   operation: 'insert' | 'replace' | 'delete' | 'create'
@@ -8,6 +13,7 @@ export interface EditOperation {
   startLine?: number
   endLine?: number
   content?: string
+  precondition?: EditPrecondition
 }
 
 // Search field semantics per operation type:
@@ -22,7 +28,7 @@ export interface EditOperation {
 export interface ApplyResult {
   applied: EditOperation[]
   failed: Array<{ edit: EditOperation; error: string }>
-  originals: Map<string, string>
+  originals: Map<string, string | null>
 }
 
 export interface DiffPreview {

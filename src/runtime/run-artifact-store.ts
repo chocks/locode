@@ -1,0 +1,45 @@
+import fs from 'fs'
+import path from 'path'
+import type { TaskIntent } from '../orchestrator/task-classifier'
+import type { AgentType } from '../orchestrator/router'
+
+export interface RunArtifactInput {
+  prompt: string
+  intent: TaskIntent
+  routeMethod: 'rule' | 'llm'
+  agent: AgentType
+  reason: string
+  summary: string
+  content: string
+  metadata?: Record<string, unknown>
+}
+
+export interface RunArtifactResult {
+  runDir: string
+  filePath: string
+}
+
+export class RunArtifactStore {
+  constructor(private baseDir: string) {}
+
+  async write(input: RunArtifactInput): Promise<RunArtifactResult> {
+    const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${Math.random().toString(36).slice(2, 8)}`
+    const runDir = path.resolve(this.baseDir, runId)
+    fs.mkdirSync(runDir, { recursive: true })
+
+    const filePath = path.join(runDir, 'run.json')
+    const payload = {
+      ...input,
+      createdAt: new Date().toISOString(),
+    }
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2))
+    fs.writeFileSync(path.join(runDir, 'prompt.txt'), input.prompt)
+    fs.writeFileSync(path.join(runDir, 'content.txt'), input.content)
+    fs.writeFileSync(path.join(runDir, 'summary.txt'), input.summary)
+    if (input.metadata) {
+      fs.writeFileSync(path.join(runDir, 'metadata.json'), JSON.stringify(input.metadata, null, 2))
+    }
+
+    return { runDir, filePath }
+  }
+}

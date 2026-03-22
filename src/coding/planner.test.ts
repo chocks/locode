@@ -41,6 +41,7 @@ describe('Planner', () => {
           file: 'src/a.ts',
           operation: 'insert',
           search: 'export const x',
+          precondition: { fileHash: 'abc123' },
           reasoning: 'Need logger import',
         }],
         estimatedFiles: ['src/a.ts'],
@@ -56,6 +57,7 @@ describe('Planner', () => {
       expect(result.description).toBe('Add logging')
       expect(result.steps).toHaveLength(1)
       expect(result.steps[0].file).toBe('src/a.ts')
+      expect(result.steps[0].precondition?.fileHash).toBe('abc123')
     })
 
     it('handles malformed JSON by extracting with regex', async () => {

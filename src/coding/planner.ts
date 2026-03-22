@@ -140,6 +140,7 @@ Respond with ONLY the corrected JSON plan (same format as above).`
         file: s.file ?? '',
         operation: this.normalizeOperation(s.operation),
         search: s.search,
+        precondition: s.precondition,
         reasoning: s.reasoning ?? '',
       })),
       estimatedFiles: p.estimatedFiles ?? p.steps.map(s => s.file),

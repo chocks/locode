@@ -13,6 +13,9 @@ import { CodingAgent } from '../coding/coding-agent'
 import { Planner } from '../coding/planner'
 import { AgentMemory } from '../coding/memory'
 import { CodeEditor } from '../editor/code-editor'
+import { TaskClassifier, type TaskIntent } from './task-classifier'
+import { RunArtifactStore } from '../runtime/run-artifact-store'
+import type { ApprovalHandler } from '../tools/executor'
 
 function isRateLimitError(err: unknown): boolean {
   return err instanceof Error && 'status' in err && (err as { status: number }).status === 429
@@ -47,13 +50,27 @@ export class Orchestrator {
 
   private toolExecutor: ToolExecutor
   private codingAgent: CodingAgent | null = null
+  private taskClassifier: TaskClassifier
+  private artifactStore: RunArtifactStore
 
   constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent, options?: OrchestratorOptions) {
     this.config = config
     this.router = new Router(config)
+    this.taskClassifier = new TaskClassifier()
+    const runtimeConfig = {
+      artifacts_dir: config.runtime?.artifacts_dir ?? '.locode/runs',
+      approval_mode: config.runtime?.approval_mode ?? 'prompt',
+      classifier: config.runtime?.classifier ?? 'unified',
+    }
+    this.artifactStore = new RunArtifactStore(runtimeConfig.artifacts_dir)
     const registry = createDefaultRegistry()
     const safetyGate = new SafetyGate(config.safety)
     this.toolExecutor = new ToolExecutor(registry, safetyGate)
+    if (runtimeConfig.approval_mode === 'auto') {
+      this.toolExecutor.setApprovalHandler(async () => true)
+    } else if (runtimeConfig.approval_mode === 'read-only') {
+      this.toolExecutor.setApprovalHandler(async () => false)
+    }
     this.localAgent = localAgent ?? new LocalAgent(config, this.toolExecutor, { verbose: options?.verbose })
     this.claudeAgent = claudeAgent ?? new ClaudeAgent(config, this.toolExecutor)
     this.tracker = new TokenTracker(config.token_tracking)
@@ -62,20 +79,7 @@ export class Orchestrator {
     this.verbose = options?.verbose ?? false
     this.repoContext = loadRepoContext(config.context.repo_context_files, config.context.max_file_bytes)
 
-    if (config.agent) {
-      const codeEditor = new CodeEditor(safetyGate, process.cwd())
-      const planner = new Planner(this.localAgent, this.claudeAgent)
-      const agentMemory = new AgentMemory()
-      this.codingAgent = new CodingAgent(
-        this.localAgent,
-        this.localOnly ? null : this.claudeAgent,
-        this.toolExecutor,
-        codeEditor,
-        planner,
-        agentMemory,
-        config.agent,
-      )
-    }
+    this.rebuildCodingAgent(safetyGate)
   }
 
   async initMcp(): Promise<void> {
@@ -97,8 +101,9 @@ export class Orchestrator {
         },
       })
     }
-    // Rebuild local agent with updated registry (MCP tools now included)
+    // Rebuild local agent and coding agent with updated registry (MCP tools now included)
     this.localAgent = new LocalAgent(this.config, this.toolExecutor, { verbose: this.verbose })
+    this.rebuildCodingAgent(new SafetyGate(this.config.safety))
   }
 
   async shutdown(): Promise<void> {
@@ -108,6 +113,8 @@ export class Orchestrator {
   isLocalOnly(): boolean { return this.localOnly }
   isClaudeOnly(): boolean { return this.claudeOnly }
   isLocalFallback(): boolean { return this.localFallback }
+  classifyTask(prompt: string): TaskIntent { return this.taskClassifier.classify(prompt) }
+  setApprovalHandler(handler: ApprovalHandler | null): void { this.toolExecutor.setApprovalHandler(handler) }
 
   async process(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
     // Token exhaustion fallback
@@ -141,22 +148,27 @@ export class Orchestrator {
     // Enrich prompt with any referenced file contents before routing/dispatch
     const enrichedPrompt = injectFileContext(prompt, this.config.context.max_file_bytes)
 
+    const intent = this.classifyTask(prompt)
+    if (!this.localFallback && this.codingAgent && intent === 'edit') {
+      const preferredAgent = this.claudeOnly ? 'claude' : this.localOnly ? 'local' : undefined
+      return this.runCodingAgent(enrichedPrompt, preferredAgent)
+    }
+
     if (this.claudeOnly) {
       const result = await this.claudeAgent.run(enrichedPrompt, previousSummary, this.repoContext)
       this.tracker.record({ agent: 'claude', input: result.inputTokens, output: result.outputTokens, model: this.config.claude.model })
       await this.checkAndTriggerFallback(result)
-      return { ...result, agent: 'claude', routeMethod: 'rule', reason: '--claude-only mode' }
+      const finalResult = { ...result, agent: 'claude' as const, routeMethod: 'rule' as const, reason: '--claude-only mode' }
+      await this.writeArtifact(enrichedPrompt, intent, finalResult)
+      return finalResult
     }
 
     if (this.localOnly) {
       const result = await this.localAgent.run(enrichedPrompt, previousSummary, this.repoContext)
       this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
-      return { ...result, agent: 'local', routeMethod: 'rule', reason: '--local-only mode' }
-    }
-
-    // Coding task detection — routes to CodingAgent (respects mode flags)
-    if (!this.localFallback && this.codingAgent && this.isCodingTask(prompt)) {
-      return this.runCodingAgent(enrichedPrompt)
+      const finalResult = { ...result, agent: 'local' as const, routeMethod: 'rule' as const, reason: '--local-only mode' }
+      await this.writeArtifact(enrichedPrompt, intent, finalResult)
+      return finalResult
     }
 
     const decision = await this.router.classify(enrichedPrompt)
@@ -184,7 +196,9 @@ export class Orchestrator {
       model: decision.agent === 'local' ? this.config.local_llm.model : this.config.claude.model,
     })
 
-    return { ...result, agent: decision.agent, routeMethod: decision.method, reason }
+    const finalResult = { ...result, agent: decision.agent, routeMethod: decision.method, reason }
+    await this.writeArtifact(enrichedPrompt, intent, finalResult)
+    return finalResult
   }
 
   async route(prompt: string): Promise<RouteDecision> {
@@ -194,6 +208,11 @@ export class Orchestrator {
 
   async execute(prompt: string, agent: AgentType, previousSummary?: string): Promise<OrchestratorResult> {
     const enrichedPrompt = injectFileContext(prompt, this.config.context.max_file_bytes)
+    const intent = this.classifyTask(prompt)
+
+    if (this.codingAgent && intent === 'edit') {
+      return this.runCodingAgent(enrichedPrompt, agent)
+    }
 
     let result: AgentResult
     let actualAgent = agent
@@ -220,7 +239,9 @@ export class Orchestrator {
       model: actualAgent === 'local' ? this.config.local_llm.model : this.config.claude.model,
     })
 
-    return { ...result, agent: actualAgent, routeMethod: 'llm', reason }
+    const finalResult = { ...result, agent: actualAgent, routeMethod: 'llm' as const, reason }
+    await this.writeArtifact(enrichedPrompt, intent, finalResult)
+    return finalResult
   }
 
   async retryWithLocal(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
@@ -237,15 +258,14 @@ export class Orchestrator {
   }
 
   isCodingTask(prompt: string): boolean {
-    if (/^(explain|describe|what|how|why|show|tell|list)\b/i.test(prompt)) return false
-    return /\b(add|fix|implement|refactor|change|update|modify|create|write|delete|remove)\b/i.test(prompt)
+    return this.classifyTask(prompt) === 'edit'
   }
 
-  async runCodingAgent(prompt: string): Promise<OrchestratorResult> {
+  async runCodingAgent(prompt: string, preferredAgent?: AgentType): Promise<OrchestratorResult> {
     if (!this.codingAgent) {
       return this.process(prompt)
     }
-    const result = await this.codingAgent.run(prompt)
+    const result = await this.codingAgent.run(prompt, { preferredAgent })
     this.tracker.record({
       agent: result.agent,
       input: result.tokensUsed.input,
@@ -255,7 +275,7 @@ export class Orchestrator {
     const summary = result.success
       ? `Applied ${result.edits.length} edits (${result.iterations} iterations)`
       : 'Coding agent failed to apply edits'
-    return {
+    const finalResult: OrchestratorResult = {
       content: result.diffs.join('\n') || summary,
       summary,
       inputTokens: result.tokensUsed.input,
@@ -264,6 +284,13 @@ export class Orchestrator {
       routeMethod: 'rule',
       reason: 'coding task detected',
     }
+    await this.writeArtifact(prompt, 'edit', finalResult, {
+      edits: result.edits,
+      diffs: result.diffs,
+      iterations: result.iterations,
+      validationPassed: result.validationPassed,
+    })
+    return finalResult
   }
 
   getCodingAgent(): CodingAgent | null {
@@ -272,6 +299,48 @@ export class Orchestrator {
 
   getStats() { return this.tracker.getStats() }
   resetStats() { this.tracker.reset() }
+
+  private rebuildCodingAgent(safetyGate: SafetyGate): void {
+    if (!this.config.agent) {
+      this.codingAgent = null
+      return
+    }
+    const codeEditor = new CodeEditor(safetyGate, process.cwd())
+    const planner = new Planner(this.localAgent, this.claudeAgent)
+    const agentMemory = new AgentMemory()
+    this.codingAgent = new CodingAgent(
+      this.localAgent,
+      this.localOnly ? null : this.claudeAgent,
+      this.toolExecutor,
+      codeEditor,
+      planner,
+      agentMemory,
+      this.config.agent,
+      this.config.performance,
+    )
+  }
+
+  private async writeArtifact(
+    prompt: string,
+    intent: TaskIntent,
+    result: OrchestratorResult,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.artifactStore.write({
+        prompt,
+        intent,
+        routeMethod: result.routeMethod,
+        agent: result.agent,
+        reason: result.reason,
+        summary: result.summary,
+        content: result.content,
+        metadata,
+      })
+    } catch {
+      // Artifact writing should never break the user-facing run.
+    }
+  }
 
   private async checkAndTriggerFallback(result: ClaudeAgentResult): Promise<void> {
     const info = result.rateLimitInfo

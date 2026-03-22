@@ -19,6 +19,10 @@ export interface EditStep {
   file: string
   operation: 'insert' | 'replace' | 'delete' | 'create'
   search?: string
+  precondition?: {
+    fileHash?: string
+    mustContain?: string[]
+  }
   reasoning: string
 }
 
