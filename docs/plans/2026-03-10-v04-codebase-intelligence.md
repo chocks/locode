@@ -24,6 +24,29 @@ Make the coding agent **repo-aware**. Instead of relying on the LLM to guess wha
 
 ---
 
+## v0.4 and Model Specialization
+
+v0.4 is the point where the optional `Model Specialization` track starts its infrastructure work. That work is complementary to codebase intelligence, not a separate milestone and not a shipping gate for v0.4.
+
+**Model-specialization work that belongs in or alongside v0.4**
+- split router config from local-executor config so routing experiments do not change executor behavior
+- enrich run artifacts with session-linked traces, route confidence, tool trajectories, and latency
+- tighten local tool prompts/schemas to make small models more deterministic
+- build eval harnesses for routing and bounded local-tool tasks
+
+**Why it fits here**
+- v0.4 increases deterministic local context gathering, which improves the quality of local-task traces
+- v0.4 retrieval and context tools create the exact usage data needed to evaluate routing and narrow local-model behavior
+- this work improves the local path on weak hardware without changing v0.4's core goal of repo-aware retrieval
+
+**Shared infrastructure note**
+- v0.4's optional embedding index (qmd) could also serve the embedding-based routing classifier proposed in the model specialization memo (Phase 3b). If both are built, the embedding pipeline should be evaluated for reuse rather than building two separate vector systems.
+
+**Constraint**
+- classifier experiments and local-model fine-tuning must not block v0.4 delivery
+
+---
+
 ## 3. Architecture
 
 ```

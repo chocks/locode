@@ -24,6 +24,25 @@ Chain multiple coding agent runs into **automated workflows** — fetch tickets,
 
 ---
 
+## v0.5 and Model Specialization
+
+v0.5 benefits from the optional `Model Specialization` track, but does not depend on it for delivery.
+
+**How specialization can help v0.5**
+- a faster classifier can reduce routing overhead for workflow steps on low-powered devices
+- a narrower local executor can make bounded orchestration steps more responsive
+- better traces and evals from the specialization track can improve workflow-step routing confidence
+
+**What remains true without custom models**
+- the workflow engine should work with the default routing/runtime stack
+- Claude remains the path for complex code generation and reasoning
+- workflow safety, checkpoints, and state handling must not assume fine-tuned models exist
+
+**Constraint**
+- do not make classifier training or local fine-tuning a hard prerequisite for workflow automation
+
+---
+
 ## 3. Architecture
 
 ```
