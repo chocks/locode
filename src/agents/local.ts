@@ -2,7 +2,7 @@ import { Ollama } from 'ollama'
 import type { ToolExecutor } from '../tools/executor'
 
 interface LocalConfig {
-  local_llm: { provider: 'ollama'; model: string; base_url: string; options?: Record<string, number> }
+  local_llm: { provider: 'ollama'; model: string; base_url: string; options?: Record<string, number>; thinking?: boolean }
   context?: { handoff: 'summary'; max_summary_tokens: number }
 }
 
@@ -122,7 +122,7 @@ export class LocalAgent {
           model: this.config.local_llm.model,
           messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<InstanceType<typeof Ollama>['chat']>[0]['messages'],
           tools: allTools as unknown as Parameters<InstanceType<typeof Ollama>['chat']>[0]['tools'],
-
+          think: this.config.local_llm.thinking ?? false,
           ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
         })
       } catch (err) {
@@ -220,7 +220,7 @@ export class LocalAgent {
       final = await this.ollama.chat({
         model: this.config.local_llm.model,
         messages: [{ role: 'system', content: systemPrompt }, ...messages] as Parameters<InstanceType<typeof Ollama>['chat']>[0]['messages'],
-        think: false,
+        think: this.config.local_llm.thinking ?? false,
         ...(this.config.local_llm.options && { options: this.config.local_llm.options }),
       })
     } catch (err) {

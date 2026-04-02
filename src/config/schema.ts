@@ -51,6 +51,7 @@ export const ConfigSchema = z.object({
     model: z.string(),
     base_url: z.string().url(),
     options: z.record(z.string(), z.number()).optional(),
+    thinking: z.boolean().optional(),
   }),
   claude: z.object({
     model: z.string(),

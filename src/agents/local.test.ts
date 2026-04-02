@@ -424,6 +424,46 @@ describe('LocalAgent', () => {
     expect(chatCall.options).toBeUndefined()
   })
 
+  it('passes think: true to Ollama.chat when thinking is enabled', async () => {
+    const configWithThinking = {
+      local_llm: {
+        provider: 'ollama' as const,
+        model: 'gemma4:9b',
+        base_url: 'http://localhost:11434',
+        thinking: true,
+      },
+    }
+    const agent = new LocalAgent(configWithThinking, makeMockExecutor())
+    await agent.run('hello')
+
+    const chatCall = mockChat.mock.calls[0][0]
+    expect(chatCall.think).toBe(true)
+  })
+
+  it('passes think: false to Ollama.chat when thinking is disabled', async () => {
+    const configWithThinking = {
+      local_llm: {
+        provider: 'ollama' as const,
+        model: 'gemma4:9b',
+        base_url: 'http://localhost:11434',
+        thinking: false,
+      },
+    }
+    const agent = new LocalAgent(configWithThinking, makeMockExecutor())
+    await agent.run('hello')
+
+    const chatCall = mockChat.mock.calls[0][0]
+    expect(chatCall.think).toBe(false)
+  })
+
+  it('defaults think to false when thinking is not configured', async () => {
+    const agent = new LocalAgent(config, makeMockExecutor())
+    await agent.run('hello')
+
+    const chatCall = mockChat.mock.calls[0][0]
+    expect(chatCall.think).toBe(false)
+  })
+
   it('throws a helpful error when Ollama is not reachable', async () => {
 
     const fetchError = new TypeError('fetch failed')
