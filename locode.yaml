@@ -1,13 +1,23 @@
 local_llm:
   provider: ollama
+  # Recommended models (install via `ollama pull <model>`):
+  #   gemma4:2b          — fast, ~3 GB RAM, good for simple tasks
+  #   gemma4:9b          — balanced quality/speed, ~7 GB RAM  (recommended)
+  #   gemma4:27b         — best quality, ~18 GB RAM
+  #   llama3.1:8b        — solid general-purpose alternative
   model: llama3.1:8b
   base_url: http://localhost:11434
+  # Set thinking: true for hybrid-thinking variants (e.g. gemma4:27b).
+  # This enables extended reasoning tokens; output <think> blocks are
+  # automatically stripped from responses shown to the user.
+  # thinking: true
   # Ollama per-request options (passed directly to the Ollama API).
-  # num_ctx:    context window size in tokens (lower = faster, uses less RAM)
+  # num_ctx:    context window size in tokens — Gemma 4 supports up to 128k;
+  #             8192 is a practical default balancing quality and RAM usage.
   # num_thread: number of CPU threads for inference (match your core count)
   # See https://github.com/ollama/ollama/blob/main/docs/modelfile.md#valid-parameters
   options:
-    num_ctx: 4096
+    num_ctx: 8192
     num_thread: 4
 
 claude:
