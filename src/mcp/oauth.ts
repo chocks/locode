@@ -6,16 +6,19 @@ import { execFileSync } from 'child_process'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { OAuthClientMetadata, OAuthClientInformationMixed, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
 
-const AUTH_DIR = path.join(os.homedir(), '.locode', 'mcp-auth')
 const CALLBACK_PORT = 19274
 const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}/callback`
+
+function authDir() {
+  return path.join(os.homedir(), '.locode', 'mcp-auth')
+}
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 }
 
 function serverPath(serverName: string) {
-  return path.join(AUTH_DIR, serverName)
+  return path.join(authDir(), serverName)
 }
 
 export class LocodeMcpAuthProvider implements OAuthClientProvider {
