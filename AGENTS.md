@@ -30,17 +30,22 @@ Key files:
 - Run `npm test` before every commit — all tests must pass
 - Run `npm run build` to catch TypeScript errors before committing
 - Never mock real behavior away in tests; mock only external I/O (Ollama, Anthropic API)
+- Tests must call the real function, not reimplement its logic — if a function is hard to test, make it accept parameters (e.g., `loadEnvFile(path)`) rather than duplicating its internals
+- Mock names must match the actual registry (e.g., use `run_command` not `shell`)
+- Assert behavior and outcomes, not implementation details
 
 ### Security
 - `src/tools/shell.ts` uses an **allow-list** (`ALLOWED_COMMANDS` Set) — do NOT switch to a deny-list
 - `src/tools/git.ts` uses `execFileSync` (not `execSync`) to prevent shell injection
 - API keys are stored in `~/.locode/.env` with mode `0600` — never log or expose them
 - Never pass user input directly to shell commands
+- Path containment checks must use `path === base || path.startsWith(base + path.sep)` — bare `startsWith(base)` allows sibling-directory traversal
+- Avoid regex patterns with overlapping alternations — CodeQL flags these as backtracking vulnerabilities on every PR
 
 ### Config changes
-- All config changes must go through `src/config/schema.ts` (Zod schema) first
+- All config changes must go through `src/config/schema.ts` (Zod schema) first — it is the single source of truth for default values
 - If you add a config field, ensure it is actually read somewhere — dead config fields are not allowed
-- Update `locode.yaml` defaults when adding new config options
+- `locode.yaml` and `setup.ts` CONFIG_TEMPLATE must agree with the Zod defaults in `schema.ts` — when changing a default, update the schema first, then sync the others
 
 ### Adding commands
 - New CLI commands go in `src/cli/` and are registered in `src/index.ts`
