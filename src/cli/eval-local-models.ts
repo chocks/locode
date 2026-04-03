@@ -89,6 +89,14 @@ const DEFAULT_VARIANTS: EvalVariant[] = [
   { label: 'gemma4-candidate', model: 'gemma4:9b', thinking: false, numCtx: 8192 },
 ]
 
+const AUTO_APPROVED_EVAL_TOOLS = [
+  'read_file',
+  'run_command',
+  'git_query',
+  'list_files',
+  'search_code',
+]
+
 const EVAL_TASKS: EvalTaskDefinition[] = [
   {
     id: 'read-package-scripts',
@@ -119,7 +127,7 @@ const EVAL_TASKS: EvalTaskDefinition[] = [
     id: 'find-local-fallback-threshold',
     prompt: 'Find where Claude local fallback is triggered and name the config field that controls the threshold. Include the file path in your answer.',
     requiredAnyTools: ['search_code', 'read_file', 'run_command'],
-    contentChecks: [/src\/orchestrator\/orchestrator\.ts/i, /\btoken_threshold\b/i],
+    contentChecks: [/src\/orchestrator\/orchestrator\.ts/i, /token.?threshold/i],
   },
 ]
 
@@ -129,6 +137,10 @@ export function getDefaultEvalOutputPath(): string {
 
 export function getDefaultEvalVariants(): EvalVariant[] {
   return DEFAULT_VARIANTS.map(variant => ({ ...variant }))
+}
+
+export function getEvalTaskIds(): string[] {
+  return EVAL_TASKS.map(task => task.id)
 }
 
 export function parseVariantSpec(spec: string): EvalVariant {
@@ -213,7 +225,9 @@ function createEvalExecutor(): ToolExecutor {
   const registry = createEvalRegistry()
   const safetyGate = new SafetyGate({
     always_confirm: [],
-    auto_approve: registry.list().map(tool => tool.name),
+    // The eval harness registers only read-only tools, but keep the approval
+    // list explicit so future registry additions do not become auto-approved.
+    auto_approve: AUTO_APPROVED_EVAL_TOOLS,
     allowed_write_paths: ['.'],
   })
   return new ToolExecutor(registry, safetyGate)

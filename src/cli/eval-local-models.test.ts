@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ToolRegistry } from '../tools/registry'
-import { assessTaskRun, getDefaultEvalVariants, parseVariantSpec, resolveEvalVariants } from './eval-local-models'
+import { assessTaskRun, getDefaultEvalVariants, getEvalTaskIds, parseVariantSpec, resolveEvalVariants } from './eval-local-models'
 import { readFileDefinition } from '../tools/definitions/read-file'
 import type { AgentResult } from '../agents/local'
 
@@ -31,6 +31,13 @@ describe('resolveEvalVariants', () => {
   it('returns the default comparison pair when no variants are provided', () => {
     expect(getDefaultEvalVariants().map(variant => variant.model)).toEqual(['llama3.1:8b', 'gemma4:9b'])
     expect(resolveEvalVariants(undefined).map(variant => variant.model)).toEqual(['llama3.1:8b', 'gemma4:9b'])
+  })
+})
+
+describe('getEvalTaskIds', () => {
+  it('returns the available task ids for CLI discovery', () => {
+    expect(getEvalTaskIds()).toContain('read-package-scripts')
+    expect(getEvalTaskIds()).toContain('blocked-command-recovery')
   })
 })
 

@@ -9,7 +9,7 @@ import { runInstall } from './cli/install'
 import { runUpdate } from './cli/update'
 import { runSetup, loadEnvFile } from './cli/setup'
 import { runBenchmark, resolvePrompts } from './cli/benchmark'
-import { runLocalModelEval } from './cli/eval-local-models'
+import { getEvalTaskIds, runLocalModelEval } from './cli/eval-local-models'
 import { createSpinner } from './cli/spinner'
 import { preflight } from './cli/preflight'
 import path from 'path'
@@ -124,8 +124,13 @@ program
   .option('-r, --runs <n>', 'number of runs per variant', '3')
   .option('-o, --output <path>', 'path to save the JSON report', '.locode/evals/local-model-eval.json')
   .option('-t, --task <id>', 'run only a specific task id (repeatable)', (val: string, acc: string[]) => [...acc, val], [] as string[])
+  .option('--list-tasks', 'print the available task ids and exit')
   .option('--verbose', 'show tool calls and model responses')
   .action(async (opts) => {
+    if (opts.listTasks) {
+      getEvalTaskIds().forEach(taskId => console.log(taskId))
+      return
+    }
     const config = loadConfig(path.resolve(opts.config))
     preflight(config.local_llm.base_url)
     await runLocalModelEval(config, {
