@@ -1,4 +1,5 @@
 import type { EditOperation } from '../editor/types'
+import type { ToolCallRecord } from '../agents/local'
 
 export type AgentPhase = 'analyze' | 'plan' | 'execute' | 'validate' | 'present'
 
@@ -52,6 +53,21 @@ export interface AgentConfig {
   validation_command?: string
 }
 
+export interface PromptBudgetAllocation {
+  label: string
+  requestedChars: number
+  usedChars: number
+  truncated: boolean
+}
+
+export interface PromptBudgetSnapshot {
+  maxChars: number
+  usedChars: number
+  remainingChars: number
+  truncatedEntries: number
+  allocations: PromptBudgetAllocation[]
+}
+
 export interface AgentRunResult {
   success: boolean
   edits: EditOperation[]
@@ -60,6 +76,9 @@ export interface AgentRunResult {
   iterations: number
   tokensUsed: { input: number; output: number }
   agent: 'local' | 'claude'
+  plan?: EditPlan | null
+  analyzeToolCalls?: ToolCallRecord[]
+  promptBudget?: PromptBudgetSnapshot
 }
 
 export interface AgentState {

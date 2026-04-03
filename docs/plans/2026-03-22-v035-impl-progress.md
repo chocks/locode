@@ -29,9 +29,13 @@
   basic in-memory analyze-context cache
 - Coding agent now:
   can persist analyze-context cache across runs using file hashes
+- Coding agent now:
+  enforces a run-level prompt budget across gathered file context and step file injections
 - Run artifact storage added under `.locode/runs`
 - Artifact store now writes:
   `run.json`, `prompt.txt`, `content.txt`, `summary.txt`, optional `metadata.json`
+- Artifact store now also writes replay/debug helpers when structured metadata is available:
+  `result.json`, `debug.json`, `edits.json`, `diffs.patch`
 - Editor rollback now deletes newly created files
 - Edit preconditions added:
   `fileHash`, `mustContain`
@@ -50,7 +54,6 @@
 
 - Smarter patch generation/validation still needed, but runtime patch application is now hunk-based
 - Rich artifact replay tooling / run viewer
-- Whole-run prompt budgeting beyond current per-file truncation
 - Workflow intent integration beyond classification
 
 ---
@@ -85,10 +88,10 @@
 
 ## Recommended Next Slice
 
-1. Expand artifacts into a replay/debug bundle
-2. Add prompt-budget accounting at the run level, not just content truncation
-3. Improve patch-generation robustness and fallback behavior
-4. Tighten cache eviction/cleanup policy if the on-disk cache grows too much
+1. Improve patch-generation robustness and fallback behavior
+2. Tighten cache eviction/cleanup policy if the on-disk cache grows too much
+3. Add richer artifact replay/viewer tooling on top of the new bundle files
+4. Continue workflow-intent integration beyond classification
 
 ---
 
@@ -97,4 +100,4 @@
 - Branch is safe to continue from directly
 - Current PR for the follow-up patch slice: `#55`
 - The current commit is a good PR checkpoint if needed
-- If resuming later, focus on patch-generation robustness and richer artifact tooling next
+- If resuming later, focus on patch-generation robustness next

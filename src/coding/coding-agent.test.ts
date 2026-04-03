@@ -355,4 +355,45 @@ describe('CodingAgent', () => {
 
     expect(mockLocalAgent.run).toHaveBeenCalledTimes(3)
   })
+
+  it('enforces a total prompt budget across gathered file context', async () => {
+    const agent = createAgent(defaultConfig, {
+      ...defaultPerformance,
+      max_prompt_chars: 12,
+      cache_context: false,
+    })
+
+    mockToolExecutor.executeParallel.mockResolvedValue([
+      { success: true, output: 'abcdefghij' },
+      { success: true, output: 'klmnopqrst' },
+    ])
+
+    mockLocalAgent.run.mockResolvedValueOnce({
+      content: 'No extra context needed',
+      summary: '',
+      inputTokens: 20,
+      outputTokens: 10,
+    })
+
+    mockPlanner.generatePlan.mockResolvedValue({
+      description: 'No-op',
+      steps: [],
+      estimatedFiles: [],
+    })
+
+    const result = await agent.run('Update src/a.ts and src/b.ts')
+    const gatheredContext = mockPlanner.generatePlan.mock.calls[0][1]
+    const totalChars = gatheredContext.files.reduce((sum: number, file: { content: string }) => sum + file.content.length, 0)
+
+    expect(result.promptBudget).toEqual(expect.objectContaining({
+      maxChars: 12,
+      usedChars: 12,
+      remainingChars: 0,
+    }))
+    expect(totalChars).toBeLessThanOrEqual(12)
+    expect(gatheredContext.files).toEqual([
+      expect.objectContaining({ path: 'src/a.ts', content: 'abcdefghij' }),
+      expect.objectContaining({ path: 'src/b.ts', content: 'kl' }),
+    ])
+  })
 })

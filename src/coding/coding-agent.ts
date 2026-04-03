@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
 import { execFileSync } from 'child_process'
 import crypto from 'crypto'
-import type { AgentResult } from '../agents/local'
+import type { AgentResult, ToolCallRecord } from '../agents/local'
 import type { ToolExecutor } from '../tools/executor'
 import type { CodeEditor } from '../editor/code-editor'
 import type { EditOperation } from '../editor/types'
@@ -11,6 +11,8 @@ import type {
   AgentRunResult,
   EditPlan,
   GatheredContext,
+  PromptBudgetAllocation,
+  PromptBudgetSnapshot,
 } from './types'
 import type { StreamEvent } from './stream'
 import type { Planner } from './planner'
@@ -28,6 +30,40 @@ const MAX_FILE_TOKENS = 2000 // approximate chars
 export type ConfirmPlanFn = (plan: EditPlan) => Promise<boolean>
 export interface CodingAgentRunOptions {
   preferredAgent?: 'local' | 'claude'
+}
+
+class PromptBudgetTracker {
+  private usedChars = 0
+  private allocations: PromptBudgetAllocation[] = []
+
+  constructor(private maxChars: number) {}
+
+  take(label: string, content: string, maxSlice = this.maxChars): string {
+    const requestedChars = Math.min(content.length, maxSlice)
+    const remainingChars = Math.max(0, this.maxChars - this.usedChars)
+    const usedChars = Math.min(requestedChars, remainingChars)
+    const value = content.slice(0, usedChars)
+
+    this.usedChars += usedChars
+    this.allocations.push({
+      label,
+      requestedChars,
+      usedChars,
+      truncated: usedChars < requestedChars || requestedChars < content.length,
+    })
+
+    return value
+  }
+
+  snapshot(): PromptBudgetSnapshot {
+    return {
+      maxChars: this.maxChars,
+      usedChars: this.usedChars,
+      remainingChars: Math.max(0, this.maxChars - this.usedChars),
+      truncatedEntries: this.allocations.filter(entry => entry.truncated).length,
+      allocations: [...this.allocations],
+    }
+  }
 }
 
 export class CodingAgent extends EventEmitter {
@@ -60,13 +96,15 @@ export class CodingAgent extends EventEmitter {
     let allEdits: EditOperation[] = []
     let allDiffs: string[] = []
     let currentPlan: EditPlan | null = null
+    const promptBudget = this.createPromptBudget()
 
     try {
       // === ANALYZE ===
       this.emitPhase('analyze', 'Gathering context')
-      const context = await this.analyze(prompt)
+      const context = await this.analyze(prompt, promptBudget)
       totalInput += context.tokensUsed.input
       totalOutput += context.tokensUsed.output
+      const analyzeToolCalls = context.toolCalls
 
       // === Determine agent for PLAN+EXECUTE ===
       let planAgent: 'local' | 'claude' = options?.preferredAgent === 'claude' && this.claudeAgent ? 'claude' : 'local'
@@ -99,7 +137,7 @@ export class CodingAgent extends EventEmitter {
         if (!this.config.auto_confirm && this.confirmPlan) {
           const confirmed = await this.confirmPlan(currentPlan)
           if (!confirmed) {
-            const result = this.buildResult(false, [], [], null, iteration, totalInput, totalOutput, agentUsed)
+            const result = this.buildResult(false, [], [], null, iteration, totalInput, totalOutput, agentUsed, currentPlan, analyzeToolCalls, promptBudget.snapshot())
             this.emit('stream', { type: 'done', result } as StreamEvent)
             return result
           }
@@ -107,7 +145,7 @@ export class CodingAgent extends EventEmitter {
 
         // === EXECUTE ===
         this.emitPhase('execute', `Applying ${currentPlan.steps.length} edits`)
-        const edits = await this.executeSteps(currentPlan, planAgent, context.gathered)
+        const edits = await this.executeSteps(currentPlan, planAgent, context.gathered, promptBudget)
         totalInput += edits.tokensUsed.input
         totalOutput += edits.tokensUsed.output
 
@@ -133,13 +171,13 @@ export class CodingAgent extends EventEmitter {
 
           if (iteration === this.config.max_iterations) {
             await this.rollbackAll(initialOriginals)
-            return this.buildResult(false, [], [], null, iteration, totalInput, totalOutput, agentUsed)
+            return this.buildResult(false, [], [], null, iteration, totalInput, totalOutput, agentUsed, currentPlan, analyzeToolCalls, promptBudget.snapshot())
           }
           continue
         }
 
         allEdits = [...allEdits, ...applyResult.applied]
-        allDiffs = previews.map(p => p.diff)
+        allDiffs = [...allDiffs, ...previews.map(p => p.diff)]
         for (const p of previews) {
           this.emit('stream', { type: 'diff', file: p.file, diff: p.diff } as StreamEvent)
         }
@@ -154,7 +192,7 @@ export class CodingAgent extends EventEmitter {
             this.memory.record({ type: 'error', detail: validation.output })
             if (iteration === this.config.max_iterations) {
               await this.rollbackAll(initialOriginals)
-              return this.buildResult(false, allEdits, allDiffs, false, iteration, totalInput, totalOutput, agentUsed)
+              return this.buildResult(false, allEdits, allDiffs, false, iteration, totalInput, totalOutput, agentUsed, currentPlan, analyzeToolCalls, promptBudget.snapshot())
             }
             continue
           }
@@ -162,13 +200,13 @@ export class CodingAgent extends EventEmitter {
 
         // === PRESENT ===
         this.emitPhase('present', 'Done')
-        const result = this.buildResult(true, allEdits, allDiffs, true, iteration, totalInput, totalOutput, agentUsed)
+        const result = this.buildResult(true, allEdits, allDiffs, true, iteration, totalInput, totalOutput, agentUsed, currentPlan, analyzeToolCalls, promptBudget.snapshot())
         this.emit('stream', { type: 'done', result } as StreamEvent)
         return result
       }
 
       // Fell through all iterations
-      const result = this.buildResult(allEdits.length > 0, allEdits, allDiffs, null, this.config.max_iterations, totalInput, totalOutput, agentUsed)
+      const result = this.buildResult(allEdits.length > 0, allEdits, allDiffs, null, this.config.max_iterations, totalInput, totalOutput, agentUsed, currentPlan, analyzeToolCalls, promptBudget.snapshot())
       this.emit('stream', { type: 'done', result } as StreamEvent)
       return result
     } catch (err) {
@@ -178,24 +216,29 @@ export class CodingAgent extends EventEmitter {
     }
   }
 
-  private async analyze(prompt: string): Promise<{
+  private async analyze(prompt: string, promptBudget: PromptBudgetTracker): Promise<{
     gathered: GatheredContext
     tokensUsed: { input: number; output: number }
+    toolCalls: ToolCallRecord[]
   }> {
     const cacheKey = this.getContextCacheKey(prompt)
     if (this.performance?.cache_context && this.contextCache.has(cacheKey)) {
+      const gathered = this.applyPromptBudgetToGatheredContext(this.contextCache.get(cacheKey)!, promptBudget)
       return {
-        gathered: this.contextCache.get(cacheKey)!,
+        gathered,
         tokensUsed: { input: 0, output: 0 },
+        toolCalls: [],
       }
     }
     if (this.performance?.cache_context && this.persistentCache) {
       const cached = await this.persistentCache.get(prompt)
       if (cached) {
-        this.contextCache.set(cacheKey, cached)
+        const gathered = this.applyPromptBudgetToGatheredContext(cached, promptBudget)
+        this.contextCache.set(cacheKey, gathered)
         return {
-          gathered: cached,
+          gathered,
           tokensUsed: { input: 0, output: 0 },
+          toolCalls: [],
         }
       }
     }
@@ -218,13 +261,16 @@ export class CodingAgent extends EventEmitter {
       const filePath = readCalls[index].args.path as string
       this.emit('stream', { type: 'tool_call', tool: 'read_file', args: { path: filePath } } as StreamEvent)
       if (readResult.success) {
-        const truncated = this.truncateContent(readResult.output)
-        files.push({
-          path: filePath,
-          content: truncated,
-          relevance: mentionedFiles.includes(filePath) ? 'mentioned in prompt' : 'related test file',
-        })
-        this.memory.record({ type: 'file_read', detail: filePath })
+        const added = this.pushBudgetedFile(
+          files,
+          filePath,
+          readResult.output,
+          mentionedFiles.includes(filePath) ? 'mentioned in prompt' : 'related test file',
+          promptBudget,
+        )
+        if (added) {
+          this.memory.record({ type: 'file_read', detail: filePath })
+        }
       }
     }
 
@@ -248,9 +294,10 @@ export class CodingAgent extends EventEmitter {
         if (call.tool === 'read_file' && call.result?.success) {
           const filePath = call.args.path as string
           if (!files.some(f => f.path === filePath)) {
-            const truncated = this.truncateContent(call.result.output ?? '')
-            files.push({ path: filePath, content: truncated, relevance: 'analyzed' })
-            this.memory.record({ type: 'file_read', detail: filePath })
+            const added = this.pushBudgetedFile(files, filePath, call.result.output ?? '', 'analyzed', promptBudget)
+            if (added) {
+              this.memory.record({ type: 'file_read', detail: filePath })
+            }
           }
         } else if (call.tool === 'search_code' && call.result?.success) {
           try {
@@ -279,6 +326,7 @@ export class CodingAgent extends EventEmitter {
     return {
       gathered,
       tokensUsed: { input: result.inputTokens, output: result.outputTokens },
+      toolCalls: result.toolCalls ?? [],
     }
   }
 
@@ -308,7 +356,12 @@ export class CodingAgent extends EventEmitter {
     ]
   }
 
-  private async executeSteps(plan: EditPlan, agent: 'local' | 'claude', context: GatheredContext): Promise<{
+  private async executeSteps(
+    plan: EditPlan,
+    agent: 'local' | 'claude',
+    context: GatheredContext,
+    promptBudget: PromptBudgetTracker,
+  ): Promise<{
     operations: EditOperation[]
     tokensUsed: { input: number; output: number }
   }> {
@@ -320,8 +373,11 @@ export class CodingAgent extends EventEmitter {
     for (const step of plan.steps) {
       // Include file content so the LLM can generate accurate search strings
       const fileContent = context.files.find(f => f.path === step.file)?.content
-      const fileSection = fileContent
-        ? `\nCURRENT FILE CONTENT of ${step.file}:\n\`\`\`\n${fileContent}\n\`\`\`\n`
+      const budgetedFileContent = fileContent
+        ? this.takePromptBudget(promptBudget, `step:${step.file}`, fileContent)
+        : ''
+      const fileSection = budgetedFileContent
+        ? `\nCURRENT FILE CONTENT of ${step.file}:\n\`\`\`\n${budgetedFileContent}\n\`\`\`\n`
         : ''
 
       const stepPrompt = `Generate a JSON edit operation for this step:
@@ -433,16 +489,53 @@ Respond with ONLY a JSON object:
     await this.codeEditor.rollback({ applied: [], failed: [], originals })
   }
 
-  private truncateContent(content: string): string {
+  private pushBudgetedFile(
+    files: GatheredContext['files'],
+    path: string,
+    content: string,
+    relevance: string,
+    promptBudget: PromptBudgetTracker,
+  ): boolean {
+    const truncated = this.takePromptBudget(promptBudget, `file:${path}`, content)
+    if (!truncated) {
+      return false
+    }
+    files.push({ path, content: truncated, relevance })
+    return true
+  }
+
+  private applyPromptBudgetToGatheredContext(
+    gathered: GatheredContext,
+    promptBudget: PromptBudgetTracker,
+  ): GatheredContext {
+    const files: GatheredContext['files'] = []
+    for (const file of gathered.files) {
+      this.pushBudgetedFile(files, file.path, file.content, file.relevance, promptBudget)
+    }
+    return {
+      ...gathered,
+      files,
+    }
+  }
+
+  private takePromptBudget(
+    promptBudget: PromptBudgetTracker,
+    label: string,
+    content: string,
+  ): string {
     const maxChars = Math.min(
       this.performance?.max_prompt_chars ?? MAX_FILE_TOKENS * 4,
       MAX_FILE_TOKENS * 4,
     )
-    return content.slice(0, maxChars)
+    return promptBudget.take(label, content, maxChars)
   }
 
   private getContextCacheKey(prompt: string): string {
     return prompt.trim()
+  }
+
+  private createPromptBudget(): PromptBudgetTracker {
+    return new PromptBudgetTracker(this.performance?.max_prompt_chars ?? MAX_FILE_TOKENS * 4)
   }
 
   private buildResult(
@@ -454,6 +547,9 @@ Respond with ONLY a JSON object:
     inputTokens: number,
     outputTokens: number,
     agent: 'local' | 'claude',
+    plan?: EditPlan | null,
+    analyzeToolCalls?: ToolCallRecord[],
+    promptBudget?: PromptBudgetSnapshot,
   ): AgentRunResult {
     return {
       success,
@@ -463,6 +559,9 @@ Respond with ONLY a JSON object:
       iterations,
       tokensUsed: { input: inputTokens, output: outputTokens },
       agent,
+      plan,
+      analyzeToolCalls,
+      promptBudget,
     }
   }
 
