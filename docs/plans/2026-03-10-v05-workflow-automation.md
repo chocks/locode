@@ -1,15 +1,30 @@
 # Locode v0.5 — Workflow Automation
 
 **Date:** 2026-03-10
-**Status:** Proposed
-**Scope:** Assisted workflow engine, milestone commands, checkpointed state persistence, context curation for Claude
-**Depends on:** v0.3.5 (agent hardening + performance), v0.4 (codebase intelligence)
+**Updated:** 2026-04-03
+**Status:** Proposed — do not begin until v0.4a ships
+**Scope:** Single-ticket workflow engine, checkpointed state persistence, context curation for Claude. Milestone/multi-ticket looping is v0.5.1.
+**Depends on:** v0.3.5 ✓ complete, v0.4 (hard prerequisite — `implement` step quality depends on it)
+
+---
+
+## 0. Product Thesis
+
+**Internal:**
+> Locode is a checkpoint-driven workflow engine for running coding agents unattended — resumable, fully auditable, and human-gated before every remote action.
+
+**External tagline:**
+> Auditable, resumable ticket-to-PR workflows for coding agents.
+
+This thesis creates a product bar: **Locode must be safe to leave running.** Every design decision in v0.5 should be evaluated against it. Silent failures, non-deterministic checkpoints, undefined rollback for remote git state — all violate the trust contract.
 
 ---
 
 ## 1. Goal
 
-Chain multiple coding agent runs into **automated workflows** — fetch tickets, create branches, gather context, implement code, run tests, commit, push, and create PRs. The local LLM orchestrates; Claude writes code; Locode manages everything.
+Take a single ticket from description to committed, tested code — with resumable execution, full step-level auditability, and human gates before every remote action. The local LLM orchestrates; Claude writes code; Locode manages state and safety.
+
+**v0.5 scope:** `single_ticket` workflow only. The `milestone` template (which requires a loop/iterator primitive over multiple tickets) ships in v0.5.1 once the single-ticket execution core is proven reliable.
 
 ---
 
@@ -132,26 +147,47 @@ export interface WorkflowTemplate {
   steps: WorkflowStepDef[]
 }
 
-export interface WorkflowStepDef {
+// Discriminated union — engine switches on `type` to handle loops vs linear steps
+export type WorkflowStepDef = LinearStepDef | ForEachStepDef
+
+export interface LinearStepDef {
+  type?: 'linear'  // default; omitting `type` is treated as linear (backward-compatible)
   id: string
-  agent: 'local' | 'claude' | 'coding-agent'  // coding-agent uses the v0.3 CodingAgent
+  agent: 'local' | 'claude' | 'coding-agent'
   description: string
   tools?: string[]                    // restrict available tools for this step
-  checkpoint?: 'never' | 'before' | 'after'
-  input?: string                      // reference to previous step output key
-  output?: string                     // key to store result
-  on_failure?: 'stop' | 'retry' | string  // step id to jump to
-  max_retries?: number
+  checkpoint?: 'never' | 'before' | 'after' | 'both'
+  inputFrom?: string[]                // explicit step output keys this step reads
+  outputKey?: string                  // key to store result in step results namespace
+  onFailure?: OnFailure
 }
+
+// First-class loop primitive — required for milestone/multi-ticket templates (v0.5.1+)
+export interface ForEachStepDef {
+  type: 'for-each'
+  id: string
+  iterateOver: string                 // outputKey from a previous step (must resolve to array)
+  itemKey: string                     // binding name for each item within the sub-workflow
+  subWorkflow: WorkflowTemplate       // runs once per item
+  checkpoint?: 'never' | 'before-each' | 'after-each'
+}
+
+// Typed failure handling — replaces on_failure: string (which was a goto in disguise)
+export type OnFailure =
+  | { action: 'stop' }
+  | { action: 'retry'; maxRetries: number }
+  | { action: 'recover'; recoveryStepId: string; maxAttempts: number }
+  | { action: 'continue' }           // mark failed, proceed anyway (use with caution)
 
 export interface WorkflowInstance {
   id: string
   template: string
+  snapshotTemplate: WorkflowTemplate  // full template definition pinned at start — safe to change templates without breaking resume
   status: 'running' | 'paused' | 'completed' | 'failed'
   currentStep: number
-  stepResults: Map<string, StepResult>
+  stepResults: Record<string, StepResult>  // plain object — JSON-safe, not Map (Map serializes to {})
   artifactDir: string
-  params: Record<string, unknown>     // initial parameters
+  params: Record<string, unknown>
   startedAt: number
   updatedAt: number
 }
@@ -164,6 +200,17 @@ export interface StepResult {
   approvalRequired?: boolean
   tokensUsed: { input: number; output: number }
   durationMs: number
+}
+
+// Shown to user at every checkpoint — gives context for approval, not just a blocking prompt
+export interface WorkflowApprovalRequest {
+  workflowId: string
+  stepId: string
+  description: string               // "Push branch feat/linear-12 to origin"
+  action: string                    // human-readable action
+  preview?: string                  // diff, PR title, commit message, etc.
+  consequences: string[]            // ["Creates remote branch", "Triggers CI"]
+  artifactDir: string               // path to step artifacts for inspection
 }
 ```
 
@@ -289,16 +336,9 @@ export class ContextCache {
 
 ## 6. Workflow Templates
 
-Built-in templates should be **assisted** by default:
+Built-in templates should be **assisted** by default — the default posture favors user trust over full autonomy. Templates can opt into fewer checkpoints, but the product never removes them globally without explicit user config.
 
-- `feature-ticket`
-  checkpoints before branch creation, before commit, before push, before PR creation
-- `bugfix`
-  checkpoints before commit and before PR creation
-- `test-fix`
-  no remote git operations unless explicitly enabled
-
-Templates can opt into fewer checkpoints, but the default product posture should favor user trust over full autonomy.
+**v0.5 ships one built-in template: `single_ticket`.** The `milestone` template requires the `ForEachStepDef` loop primitive and ships in v0.5.1.
 
 ---
 
@@ -325,101 +365,86 @@ Ship workflow automation in this order:
 
 This keeps v0.5 developer-friendly and safe while still moving toward end-to-end automation.
 
-### 6.1 Default Milestone Template
+### 6.1 Single Ticket Template (v0.5)
 
 ```yaml
-# Built-in template (src/workflow/templates.ts)
+# Built-in template — ships in v0.5
+single_ticket:
+  description: "Implement a single ticket from description to committed, tested code"
+  steps:
+    - id: gather_context
+      type: linear
+      agent: local
+      description: "Gather relevant code context for implementation"
+      tools: [search_code, read_file, symbol_lookup, semantic_search]
+      outputKey: context_bundle
 
+    - id: implement
+      type: linear
+      agent: coding-agent
+      description: "Implement the changes"
+      inputFrom: [context_bundle]
+      outputKey: code_changes
+      onFailure: { action: retry, maxRetries: 2 }
+      checkpoint: never  # workspace-only at this point; no remote actions yet
+
+    - id: run_tests
+      type: linear
+      agent: local
+      description: "Run tests to validate changes"
+      tools: [run_command]
+      inputFrom: [code_changes]
+      outputKey: test_results
+      onFailure: { action: recover, recoveryStepId: fix_tests, maxAttempts: 1 }
+
+    - id: fix_tests
+      type: linear
+      agent: coding-agent
+      description: "Fix failing tests"
+      inputFrom: [test_results]
+      outputKey: code_changes  # overwrites previous code_changes
+      onFailure: { action: stop }
+
+    - id: commit
+      type: linear
+      agent: local
+      description: "Stage and commit changes"
+      tools: [git_mutate]
+      inputFrom: [code_changes]
+      checkpoint: before  # user sees commit message + diff before it lands
+```
+
+> **Note on `fix_tests`:** This is an explicit step ID referenced by `run_tests.onFailure.recoveryStepId`, not a goto. The engine executes it only once (bounded by `maxAttempts`) and halts on failure. Recovery steps are always typed and bounded — never implicit jumps.
+
+### 6.2 Milestone Template (v0.5.1 — requires ForEachStepDef)
+
+The milestone template requires the `for-each` loop primitive to iterate over tickets. It ships in v0.5.1 once the single-ticket execution core is proven reliable:
+
+```yaml
+# Planned for v0.5.1
 milestone:
   description: "Implement all tickets in a milestone"
   steps:
     - id: fetch_tickets
+      type: linear
       agent: local
       description: "Fetch tickets from project management tool"
       tools: [mcp__linear__list_issues, mcp__github__list_issues]
-      output: tickets
+      outputKey: tickets
 
-    - id: for_each_ticket  # pseudo — engine handles iteration
-      agent: local
-      description: "Process each ticket"
-      input: tickets
-      steps:
-        - id: create_branch
-          agent: local
-          description: "Create a git branch for this ticket"
-          tools: [git_mutate]
-          output: branch_name
-
-        - id: gather_context
-          agent: local
-          description: "Gather relevant code context for implementation"
-          tools: [search_code, read_file, symbol_lookup, semantic_search]
-          output: context_bundle
-
-        - id: implement
-          agent: coding-agent
-          description: "Implement the ticket changes"
-          input: context_bundle
-          output: code_changes
-          on_failure: retry
-          max_retries: 2
-
-        - id: run_tests
-          agent: local
-          description: "Run tests to validate changes"
-          tools: [run_command]
-          on_failure: fix_and_retry
-
-        - id: fix_and_retry
-          agent: coding-agent
-          description: "Fix failing tests"
-          input: test_errors
-          on_failure: stop
-          max_retries: 1
-
-        - id: commit_push
-          agent: local
-          description: "Stage, commit, and push changes"
-          tools: [git_mutate]
-
-        - id: create_pr
-          agent: local
-          description: "Create a pull request"
-          tools: [run_command]  # gh pr create
-
-        - id: update_ticket
-          agent: local
-          description: "Update ticket status to done"
-          tools: [mcp__linear__save_issue, mcp__github__update_issue]
+    - id: process_tickets
+      type: for-each          # requires ForEachStepDef — NOT available in v0.5
+      iterateOver: tickets
+      itemKey: ticket
+      checkpoint: before-each
+      subWorkflow:
+        name: single_ticket_with_pr
+        steps:
+          # ... single_ticket steps + create_branch + create_pr
+          # update_ticket deliberately omitted until write-back is proven safe
 ```
 
-### 6.2 Single Ticket Template
-
-```yaml
-single_ticket:
-  description: "Implement a single ticket"
-  steps:
-    - id: gather_context
-      agent: local
-      tools: [search_code, read_file, symbol_lookup, semantic_search]
-      output: context_bundle
-
-    - id: implement
-      agent: coding-agent
-      input: context_bundle
-      output: code_changes
-      on_failure: retry
-      max_retries: 2
-
-    - id: run_tests
-      agent: local
-      tools: [run_command]
-      on_failure: stop
-
-    - id: commit
-      agent: local
-      tools: [git_mutate]
-```
+> **Deliberately excluded from milestone template:** `update_ticket` (Linear/GitHub write-back). High blast radius for a step that adds no value in proving the core execution model. Add it in v0.5.2 after the loop primitive is stable.
 
 ---
 
@@ -543,20 +568,30 @@ class Orchestrator {
 }
 ```
 
-### v0.3 CodingAgent
+### v0.3 CodingAgent in Workflow Mode
 
-The workflow engine delegates implementation steps to `CodingAgent`:
+The workflow engine delegates implementation steps to `CodingAgent`. In workflow mode, interactive prompts (diff display, plan approval) are suppressed — but this is not a simple `autoConfirm: true` flag. The distinction matters:
+
+- **Interactive mode:** user approves diffs, plans, tool calls
+- **Workflow mode:** workflow-level checkpoints gate remote actions; within-step operations execute without per-prompt approval; diffs are captured as artifacts rather than displayed
+
+The `CodingAgent` must accept an explicit `executionMode` to make this distinction clear at the type level:
 
 ```typescript
 // In WorkflowEngine step execution
 case 'coding-agent':
-  const context = stepResults.get(step.input)
+  const contextBundle = step.inputFrom
+    ?.map(key => stepResults[key]?.output)
+    .find(Boolean)
   const result = await this.codingAgent.run(step.description, {
-    context: context as GatheredContext,
-    autoConfirm: true,  // no manual confirmation in workflow mode
+    context: contextBundle as GatheredContext,
+    executionMode: 'workflow',  // suppresses interactive prompts; diffs go to artifacts
+    artifactDir: instance.artifactDir,
   })
   return { output: result.edits, tokensUsed: result.tokensUsed }
 ```
+
+> **Design note:** Do not use `autoConfirm: true` for this. That flag bypasses the safety layer entirely. `executionMode: 'workflow'` should suppress interactive display while still writing diffs and plans to the artifact dir — preserving auditability.
 
 ### v0.4 ContextRetriever
 
@@ -598,22 +633,36 @@ Future optimization: parallel ticket execution using git worktrees (one worktree
 
 ## 13. What This Enables
 
-v0.5 is the culmination of the architecture. After v0.5:
-- Developers can run `locode milestone start "sprint-3"` and walk away
-- Locode fetches tickets, implements code, runs tests, creates PRs
-- Local LLM handles orchestration at zero cloud cost
-- Claude only called for actual code implementation (minimal tokens)
+After v0.5:
+- Developers run `locode implement --ticket LINEAR-42`, step away, and return to committed, tested code
+- Every step is logged to the artifact dir — readable post-hoc even if the session is gone
+- Interrupted runs resume cleanly; no need to re-run from scratch
+- Checkpoints before commit mean nothing irreversible happens without explicit approval
+- Local LLM handles orchestration at zero cloud cost; Claude only handles code generation
+
+After v0.5.1:
+- `locode milestone start "sprint-3"` processes multiple tickets sequentially
+- Each ticket gets its own branch, implementation, test run, and PR — human-gated before each push
 
 ---
 
 ## 14. Success Criteria
 
-- [ ] Workflow engine executes multi-step templates
-- [ ] State persists to disk; interrupted workflows resume correctly
-- [ ] `locode milestone start` fetches tickets via MCP and processes them
-- [ ] CodingAgent integration works within workflow steps
-- [ ] Context curation produces focused bundles from codebase index
-- [ ] Progress display shows real-time step completion
-- [ ] Error recovery handles test failures with retry
-- [ ] Claude rate limits pause workflow and resume automatically
+**v0.5 (single-ticket workflow):**
+- [ ] `WorkflowEngine` executes flat `LinearStepDef` templates
+- [ ] `WorkflowInstance.stepResults` serializes/deserializes correctly (no `Map` — use `Record`)
+- [ ] `WorkflowInstance.snapshotTemplate` is saved at start; resume uses snapshot, not current template
+- [ ] Interrupted workflows resume from correct step with correct step results loaded
+- [ ] `WorkflowApprovalRequest` is shown at every checkpoint with action, preview, and consequences
+- [ ] `CodingAgent` runs in `executionMode: 'workflow'` — no interactive prompts; diffs written to artifact dir
+- [ ] `locode implement "..."` and `locode implement --ticket LINEAR-42` work end-to-end
+- [ ] `single_ticket` template: gather_context → implement → run_tests → (fix_tests) → commit
+- [ ] Error recovery: `recover` strategy calls `fix_tests` step once on test failure, then stops
+- [ ] Claude rate limit pauses workflow, saves state, resumes on next run
+- [ ] Progress display shows real-time step completion with token and time stats
 - [ ] All tests pass, build succeeds
+
+**v0.5.1 (milestone workflow — not in v0.5 scope):**
+- [ ] `ForEachStepDef` implemented in engine with bounded iteration
+- [ ] `milestone` template fetches tickets via MCP and processes each via sub-workflow
+- [ ] `locode milestone start "..."` works end-to-end
