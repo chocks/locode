@@ -49,3 +49,12 @@ jobs:
           sentry-cli releases new "${{ github.ref_name }}"
           sentry-cli releases set-commits "${{ github.ref_name }}" --auto
           sentry-cli releases finalize "${{ github.ref_name }}"
+
+      - name: Trigger docs site sync
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_SITE_PAT }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh api repos/chocks/locodecli-site/dispatches \
+            -f event_type=docs-updated \
+            -f "client_payload[tag]=$TAG"
