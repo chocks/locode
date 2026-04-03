@@ -42,6 +42,7 @@ Routing Logic
 | `locode install [model]` | Pull a specific Ollama model |
 | `locode update` | Update locode to the latest version |
 | `locode benchmark` | Compare token cost across routing modes |
+| `locode eval-local-models` | Compare local models on tool-calling reliability |
 
 ### Flags
 
@@ -58,11 +59,14 @@ If no `ANTHROPIC_API_KEY` is set, locode automatically runs in local-only mode.
 
 Edit `locode.yaml` for routing rules, models, and thresholds:
 
-- `local_llm.model` — Ollama model (default: `qwen3:8b`)
+- `local_llm.model` — Ollama model (default: `llama3.1:8b`)
 - `routing.rules` — regex patterns that route tasks to local or Claude
 - `routing.escalation_threshold` — confidence below this escalates to Claude
 
 Type `stats` in the REPL to see token usage and estimated savings.
+
+Current default: `llama3.1:8b` is the conservative tool-calling baseline.
+Recommended upgrade to evaluate locally: `gemma4:9b`.
 
 ## Telemetry (Opt-in)
 
