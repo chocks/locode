@@ -1,9 +1,11 @@
 # Locode v0.4 — Codebase Intelligence
 
 **Date:** 2026-03-10
-**Status:** Proposed
+**Updated:** 2026-04-03
+**Status:** Next — v0.3.5 complete, v0.4 is the active milestone
 **Scope:** Persistent codebase index, deterministic context retrieval, optional semantic search
-**Depends on:** v0.3.5 (agent hardening + performance)
+**Depends on:** v0.3.5 (agent hardening + performance) ✓ complete
+**Blocks:** v0.5 `implement` step quality — do not start v0.5 workflow automation until v0.4a ships
 
 ---
 
@@ -618,9 +620,9 @@ locode index --rebuild    # Force full rebuild
 
 ## 12. What This Enables
 
-- **v0.5**: Workflow engine uses smart context retrieval to build ContextBundles for Claude automatically
+- **v0.5**: Workflow engine uses smart context retrieval to build ContextBundles for Claude automatically. Without v0.4, the `gather_context` step falls back to grep and file reads — noisy context that degrades implementation quality and undermines the "safe to leave running" product promise.
 - Dramatically better ANALYZE phase — agent finds relevant code instantly instead of guessing
-- Token savings from precise context (send functions, not files)
+- Precise context (functions, not files) reduces Claude token spend per implementation step
 
 ---
 
