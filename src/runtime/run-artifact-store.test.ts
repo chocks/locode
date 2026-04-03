@@ -61,12 +61,12 @@ describe('RunArtifactStore', () => {
 
     const resultJson = JSON.parse(fs.readFileSync(path.join(artifact.runDir, 'result.json'), 'utf8'))
     const editsJson = JSON.parse(fs.readFileSync(path.join(artifact.runDir, 'edits.json'), 'utf8'))
-    const debugJson = JSON.parse(fs.readFileSync(path.join(artifact.runDir, 'debug.json'), 'utf8'))
+    const metadataJson = JSON.parse(fs.readFileSync(path.join(artifact.runDir, 'metadata.json'), 'utf8'))
     const diffsPatch = fs.readFileSync(path.join(artifact.runDir, 'diffs.patch'), 'utf8')
 
     expect(resultJson.tokens).toEqual({ input: 300, output: 90 })
     expect(editsJson).toHaveLength(1)
-    expect(debugJson.promptBudget.remainingChars).toBe(600)
+    expect(metadataJson.promptBudget.remainingChars).toBe(600)
     expect(diffsPatch).toContain('+++ b/src/a.ts')
   })
 })

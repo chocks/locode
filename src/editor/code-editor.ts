@@ -159,18 +159,28 @@ export class CodeEditor {
         return content.replace(search, edit.content ?? '')
 
       case 'insert': {
-        // Insert content AFTER the line containing the search match
-        const lines = content.split('\n')
-        const lineIdx = lines.findIndex(line => line.includes(search))
-        lines.splice(lineIdx + 1, 0, edit.content ?? '')
-        return lines.join('\n')
+        // Insert content AFTER the exact search match
+        const idx = content.indexOf(search)
+        const endOfMatch = idx + search.length
+        // Find the end of the line containing the match's last character
+        const nextNewline = content.indexOf('\n', endOfMatch)
+        if (nextNewline === -1) {
+          // Match is on the last line — append after it
+          return content + '\n' + (edit.content ?? '')
+        }
+        return content.slice(0, nextNewline + 1) + (edit.content ?? '') + '\n' + content.slice(nextNewline + 1)
       }
 
       case 'delete': {
-        // Delete the line(s) containing the search match
-        const lines = content.split('\n')
-        const filtered = lines.filter(line => !line.includes(search))
-        return filtered.join('\n')
+        // Delete the exact search match substring
+        const idx = content.indexOf(search)
+        const before = content.slice(0, idx)
+        const after = content.slice(idx + search.length)
+        // Clean up a leftover empty line at the join point
+        if (before.endsWith('\n') && after.startsWith('\n')) {
+          return before + after.slice(1)
+        }
+        return before + after
       }
 
       default:

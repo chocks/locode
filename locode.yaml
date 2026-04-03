@@ -5,7 +5,7 @@ local_llm:
   #   gemma4:9b          — balanced quality/speed, ~7 GB RAM  (recommended)
   #   gemma4:27b         — best quality, ~18 GB RAM
   #   llama3.1:8b        — solid general-purpose alternative
-  model: llama3.1:8b
+  model: qwen3:8b
   base_url: http://localhost:11434
   # Set thinking: true for hybrid-thinking variants (e.g. gemma4:27b).
   # This enables extended reasoning tokens; output <think> blocks are
@@ -41,7 +41,7 @@ context:
   handoff: summary
   max_summary_tokens: 500
   max_file_bytes: 51200
-  repo_context_files: ["CLAUDE.md"]
+  repo_context_files: ["AGENTS.md", "CLAUDE.md"]
 
 token_tracking:
   enabled: true

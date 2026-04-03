@@ -65,6 +65,27 @@ describe('CodeEditor', () => {
       expect(fs.readFileSync(file, 'utf8')).toBe('line1\nline3\n')
     })
 
+    it('inserts after a multi-line search match', async () => {
+      const file = writeFixture('ml-insert.ts', 'function a() {\n  return 1\n}\nfunction b() {}\n')
+      const edits: EditOperation[] = [{
+        file, operation: 'insert',
+        search: 'function a() {\n  return 1\n}', content: '// inserted',
+      }]
+      const result = await editor.applyEdits(edits)
+      expect(result.applied).toHaveLength(1)
+      expect(fs.readFileSync(file, 'utf8')).toBe('function a() {\n  return 1\n}\n// inserted\nfunction b() {}\n')
+    })
+
+    it('deletes an exact multi-line search match', async () => {
+      const file = writeFixture('ml-delete.ts', 'keep\nremove1\nremove2\nkeep-end\n')
+      const edits: EditOperation[] = [{
+        file, operation: 'delete', search: 'remove1\nremove2',
+      }]
+      const result = await editor.applyEdits(edits)
+      expect(result.applied).toHaveLength(1)
+      expect(fs.readFileSync(file, 'utf8')).toBe('keep\nkeep-end\n')
+    })
+
     it('fails when search matches multiple locations', async () => {
       const file = writeFixture('d.ts', 'const x = 1\nconst x = 1\n')
       const edits: EditOperation[] = [{

@@ -122,18 +122,21 @@ export class Orchestrator {
   setApprovalHandler(handler: ApprovalHandler | null): void { this.toolExecutor.setApprovalHandler(handler) }
 
   async process(prompt: string, previousSummary?: string): Promise<OrchestratorResult> {
+    // Enrich prompt with any referenced file contents before routing/dispatch
+    const enrichedPrompt = injectFileContext(prompt, this.config.context.max_file_bytes)
+
     // Token exhaustion fallback
     if (this.localFallback) {
       if (Date.now() < this.resetsAt) {
         // Still before reset — stay local
-        const result = await this.localAgent.run(prompt, this.fallbackSummary, this.repoContext)
+        const result = await this.localAgent.run(enrichedPrompt, this.fallbackSummary, this.repoContext)
         this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
         return { ...result, agent: 'local', routeMethod: 'rule', reason: 'Claude token limit reached, using local until reset' }
       }
 
       // Past reset — attempt switch-back to Claude
       try {
-        const claudeResult = await this.claudeAgent.run(prompt, this.fallbackSummary, this.repoContext)
+        const claudeResult = await this.claudeAgent.run(enrichedPrompt, this.fallbackSummary, this.repoContext)
         this.localFallback = false
         this.fallbackSummary = ''
         this.tracker.record({ agent: 'claude', input: claudeResult.inputTokens, output: claudeResult.outputTokens, model: this.config.claude.model })
@@ -142,16 +145,13 @@ export class Orchestrator {
       } catch (err) {
         if (isRateLimitError(err)) {
           this.resetsAt = Date.now() + 60 * 60 * 1000  // retry in 1 hour
-          const result = await this.localAgent.run(prompt, this.fallbackSummary, this.repoContext)
+          const result = await this.localAgent.run(enrichedPrompt, this.fallbackSummary, this.repoContext)
           this.tracker.record({ agent: 'local', input: result.inputTokens, output: result.outputTokens, model: this.config.local_llm.model })
           return { ...result, agent: 'local', routeMethod: 'rule', reason: 'Claude still rate-limited, staying on local' }
         }
         throw err
       }
     }
-
-    // Enrich prompt with any referenced file contents before routing/dispatch
-    const enrichedPrompt = injectFileContext(prompt, this.config.context.max_file_bytes)
 
     const intent = this.classifyTask(prompt)
     if (!this.localFallback && this.codingAgent && intent === 'edit') {

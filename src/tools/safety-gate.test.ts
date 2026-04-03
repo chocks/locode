@@ -63,6 +63,16 @@ describe('SafetyGate', () => {
       expect(decision.allowed).toBe(true)
     })
 
+    it('rejects writes to sibling directory with shared prefix', () => {
+      const gate = new SafetyGate(makeConfig({ allowed_write_paths: ['.'] }))
+      // If cwd is /foo/repo, /foo/repo-evil/file.ts must be rejected
+      const cwd = process.cwd()
+      const siblingPath = cwd + '-evil/malicious.ts'
+      const decision = gate.checkWritePath(siblingPath)
+      expect(decision.allowed).toBe(false)
+      expect(decision.reason).toContain('outside allowed')
+    })
+
     it('supports multiple allowed paths', () => {
       const gate = new SafetyGate(makeConfig({ allowed_write_paths: ['src', 'tests'] }))
       expect(gate.checkWritePath('src/foo.ts').allowed).toBe(true)

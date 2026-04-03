@@ -48,7 +48,6 @@ export class RunArtifactStore {
     fs.writeFileSync(path.join(runDir, 'summary.txt'), input.summary)
     if (input.metadata) {
       fs.writeFileSync(path.join(runDir, 'metadata.json'), JSON.stringify(input.metadata, null, 2))
-      fs.writeFileSync(path.join(runDir, 'debug.json'), JSON.stringify(input.metadata, null, 2))
       if (Array.isArray(input.metadata.edits)) {
         fs.writeFileSync(path.join(runDir, 'edits.json'), JSON.stringify(input.metadata.edits, null, 2))
       }

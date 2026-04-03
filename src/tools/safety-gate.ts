@@ -45,7 +45,7 @@ export class SafetyGate {
     for (const allowed of this.config.allowed_write_paths) {
       // "." means anywhere under project root
       if (allowed === '.') {
-        if (resolved.startsWith(cwd)) {
+        if (resolved === cwd || resolved.startsWith(cwd + path.sep)) {
           return { allowed: true, reason: 'within project root', requiresConfirmation: false }
         }
         continue

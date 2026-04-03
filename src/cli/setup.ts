@@ -45,16 +45,12 @@ export function writeGlobalConfig(model: string, locodeDir: string = LOCODE_DIR)
     fs.writeFileSync(yamlPath, CONFIG_TEMPLATE(model))
     return
   }
-  // Update the local_llm model line in the existing config
-  const lines = fs.readFileSync(yamlPath, 'utf8').split('\n')
-  let replaced = false
-  const updated = lines.map(line => {
-    if (!replaced && line.match(/^\s+model:/)) {
-      replaced = true
-      return line.replace(/model:\s*.+/, `model: ${model}`)
-    }
-    return line
-  }).join('\n')
+  // Update the local_llm.model line — look for model: under the local_llm section
+  const content = fs.readFileSync(yamlPath, 'utf8')
+  const updated = content.replace(
+    /(local_llm:\s*\n(?:\s+\w+:.*\n)*?\s+)model:\s*.+/,
+    `$1model: ${model}`,
+  )
   fs.writeFileSync(yamlPath, updated)
 }
 
@@ -99,9 +95,9 @@ function askMasked(question: string): Promise<string> {
   })
 }
 
-export function loadEnvFile(): void {
-  if (!fs.existsSync(ENV_FILE)) return
-  const lines = fs.readFileSync(ENV_FILE, 'utf8').split('\n')
+export function loadEnvFile(envPath: string = ENV_FILE): void {
+  if (!fs.existsSync(envPath)) return
+  const lines = fs.readFileSync(envPath, 'utf8').split('\n')
   for (const line of lines) {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#')) continue
