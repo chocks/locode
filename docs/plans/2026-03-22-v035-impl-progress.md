@@ -2,15 +2,31 @@
 
 **Started:** 2026-03-22
 **Design:** [v0.3.5 Agent Hardening + Performance](2026-03-22-v035-agent-hardening-performance.md)
-**Current branch:** `feat/v035-persistent-context-cache`
-**Checkpoint commit:** `in progress`
+**Current branch:** `feat/v035-artifacts-budget`
+**Checkpoint commit:** `50556f5`
 **Approach:** Incremental slices with clean commit checkpoints
 
 ---
 
 ## Status
 
-### Completed in current checkpoint
+### Definition of Done
+
+The `v0.3.5` milestone is complete when all of the following are checked:
+
+- [x] Unified task classification is wired into runtime behavior
+- [x] Real tool approval enforcement is wired into the executor and REPL flow
+- [x] Patch-style edits with preconditions are supported end-to-end in planner, agent, and editor
+- [x] Edit preview + rollback are trustworthy for create/replace/insert/delete/patch flows
+- [x] Run artifacts are written for every run under `.locode/runs`
+- [x] Run artifacts include enough structured data to debug a failed or successful coding run
+- [x] Deterministic fast-path retrieval is in place for obvious file context
+- [x] Analyze-context caching exists in memory and can persist across runs
+- [x] Prompt budgeting is enforced at the run level, not only as per-file truncation
+- [ ] Patch generation and fallback behavior are robust enough for repeated retry flows
+- [ ] Persistent cache cleanup/eviction policy is implemented and bounded
+
+### Completed
 
 - Minimal `patch` edit operation added:
   unified diff based patch application with real hunks via the existing `diff` library
@@ -45,16 +61,20 @@
 - Coding agent is rebuilt after MCP tool registration so coding-mode sees updated tools
 - Default repo context now includes `AGENTS.md` and `CLAUDE.md`
 
-### Verified at checkpoint
+### Remaining to Finish v0.3.5
+
+- [ ] Improve patch-generation robustness and fallback behavior
+- [ ] Add a bounded cleanup/eviction policy for persistent context cache growth
+
+### Explicitly Deferred Beyond v0.3.5
+
+- Rich artifact replay tooling / run viewer
+- Workflow intent integration beyond classification
+
+### Verification Status
 
 - `npm run build` passes
 - `npm test` passes except existing sandbox-blocked MCP OAuth tests that write under `~/.locode/...`
-
-### Known non-goals / not finished yet
-
-- Smarter patch generation/validation still needed, but runtime patch application is now hunk-based
-- Rich artifact replay tooling / run viewer
-- Workflow intent integration beyond classification
 
 ---
 
@@ -90,14 +110,14 @@
 
 1. Improve patch-generation robustness and fallback behavior
 2. Tighten cache eviction/cleanup policy if the on-disk cache grows too much
-3. Add richer artifact replay/viewer tooling on top of the new bundle files
-4. Continue workflow-intent integration beyond classification
+3. Mark `v0.3.5` complete once those two boxes are done
+4. Leave richer artifact replay/viewer tooling and workflow-intent integration for later milestones
 
 ---
 
 ## Resume Notes
 
 - Branch is safe to continue from directly
-- Current PR for the follow-up patch slice: `#55`
+- Current PR for this slice: `#63`
 - The current commit is a good PR checkpoint if needed
-- If resuming later, focus on patch-generation robustness next
+- If resuming later, focus on patch-generation robustness next, then cache eviction, then stop `v0.3.5`
