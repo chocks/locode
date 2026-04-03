@@ -42,7 +42,22 @@ describe('install helpers', () => {
   })
 
   describe('installOllama', () => {
-    it('uses curl install script on macOS when brew is not available', async () => {
+    it('uses brew on macOS when available', async () => {
+      const mockExecFileSync = vi.mocked(execFileSync)
+      const mockPlatform = vi.mocked(os.platform)
+      mockPlatform.mockReturnValue('darwin')
+
+      mockExecFileSync.mockReturnValue('')
+
+      const { installOllama } = await import('./install')
+      installOllama()
+
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'brew', ['install', 'ollama'], { stdio: 'inherit' }
+      )
+    })
+
+    it('falls back to install script on macOS when brew is not available', async () => {
       const mockExecFileSync = vi.mocked(execFileSync)
       const mockExecSync = vi.mocked(execSync)
       const mockPlatform = vi.mocked(os.platform)
@@ -57,8 +72,9 @@ describe('install helpers', () => {
       const { installOllama } = await import('./install')
       installOllama()
 
+      // Shell pipe is a deliberate exception — curl output must be piped to sh
       expect(mockExecSync).toHaveBeenCalledWith(
-        'curl -fsSL https://ollama.com/install.sh | sh',
+        expect.stringContaining('ollama.com/install.sh'),
         { stdio: 'inherit' }
       )
     })

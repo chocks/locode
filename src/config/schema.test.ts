@@ -102,7 +102,7 @@ describe('ConfigSchema', () => {
     expect(result.context.repo_context_files).toEqual(['README.md', 'CONTRIBUTING.md'])
   })
 
-  it('defaults repo_context_files to ["CLAUDE.md"] when not provided', () => {
+  it('defaults repo_context_files to ["AGENTS.md", "CLAUDE.md"] when not provided', () => {
     const result = ConfigSchema.parse(baseConfig)
     expect(result.context.repo_context_files).toEqual(['AGENTS.md', 'CLAUDE.md'])
   })

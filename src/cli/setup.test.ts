@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { writeGlobalConfig } from './setup'
+import { writeGlobalConfig, loadEnvFile } from './setup'
 
 describe('writeGlobalConfig', () => {
   const tmpDir = path.join(os.tmpdir(), 'locode-config-test-' + Date.now())
@@ -26,6 +26,29 @@ describe('writeGlobalConfig', () => {
     expect(content).toContain('model: qwen2.5-coder:14b')
     expect(content).not.toContain('model: qwen3:8b')
   })
+
+  it('updates the local_llm model when config has comment lines in the section', () => {
+    const yamlPath = path.join(tmpDir, 'locode.yaml')
+    fs.writeFileSync(yamlPath, [
+      'local_llm:',
+      '  provider: ollama',
+      '  # Recommended models:',
+      '  #   gemma4:9b — balanced',
+      '  #   llama3.1:8b — general purpose',
+      '  model: llama3.1:8b',
+      '  base_url: http://localhost:11434',
+      '',
+      'claude:',
+      '  model: claude-sonnet-4-6',
+      '',
+    ].join('\n'))
+    writeGlobalConfig('gemma4:9b', tmpDir)
+    const content = fs.readFileSync(yamlPath, 'utf8')
+    expect(content).toContain('model: gemma4:9b')
+    expect(content).not.toContain('model: llama3.1:8b')
+    // Must not touch claude.model
+    expect(content).toContain('model: claude-sonnet-4-6')
+  })
 })
 
 describe('loadEnvFile', () => {
@@ -43,39 +66,26 @@ describe('loadEnvFile', () => {
 
   it('loads key=value pairs from env file', () => {
     fs.writeFileSync(tmpEnv, 'TEST_LOCODE_KEY=hello123\n')
-
-    // Temporarily patch the ENV_FILE path by calling loadEnvFile with the test file
-    // We test by reading the file directly since loadEnvFile uses a hardcoded path
-    const content = fs.readFileSync(tmpEnv, 'utf8')
-    const lines = content.split('\n')
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue
-      const idx = trimmed.indexOf('=')
-      if (idx === -1) continue
-      const key = trimmed.slice(0, idx).trim()
-      const value = trimmed.slice(idx + 1).trim()
-      if (key && !process.env[key]) process.env[key] = value
-    }
-
+    loadEnvFile(tmpEnv)
     expect(process.env.TEST_LOCODE_KEY).toBe('hello123')
   })
 
   it('ignores comment lines', () => {
     fs.writeFileSync(tmpEnv, '# this is a comment\nTEST_LOCODE_KEY=from_file\n')
-    const content = fs.readFileSync(tmpEnv, 'utf8')
-    const lines = content.split('\n')
-    let loaded = false
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue
-      const idx = trimmed.indexOf('=')
-      if (idx === -1) continue
-      const key = trimmed.slice(0, idx).trim()
-      const value = trimmed.slice(idx + 1).trim()
-      if (key && !process.env[key]) { process.env[key] = value; loaded = true }
-    }
-    expect(loaded).toBe(true)
+    loadEnvFile(tmpEnv)
     expect(process.env.TEST_LOCODE_KEY).toBe('from_file')
+  })
+
+  it('strips surrounding quotes from values', () => {
+    fs.writeFileSync(tmpEnv, 'TEST_LOCODE_KEY="quoted_value"\n')
+    loadEnvFile(tmpEnv)
+    expect(process.env.TEST_LOCODE_KEY).toBe('quoted_value')
+  })
+
+  it('does not overwrite existing env vars', () => {
+    process.env.TEST_LOCODE_KEY = 'already_set'
+    fs.writeFileSync(tmpEnv, 'TEST_LOCODE_KEY=from_file\n')
+    loadEnvFile(tmpEnv)
+    expect(process.env.TEST_LOCODE_KEY).toBe('already_set')
   })
 })

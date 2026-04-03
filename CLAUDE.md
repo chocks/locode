@@ -61,11 +61,14 @@ Key rules:
 1. **TDD always** — write failing test, run it, implement, confirm pass, commit
 2. **All tests must pass** before committing — run `npm test`
 3. **Build must succeed** — run `npm run build` and fix TypeScript errors
-4. **No shell strings** — use `execFileSync(cmd, args[])` not `execSync('cmd args')`
+4. **No shell strings** — use `execFileSync(cmd, args[])` not `execSync('cmd args')`. If a shell pipe is genuinely required (e.g., `curl | sh`), keep the shell form but add an inline comment explaining why
 5. **Shell allow-list** — `src/tools/shell.ts` uses `ALLOWED_COMMANDS` Set; never switch to deny-list
 6. **Config-driven models** — never hardcode `'qwen3:8b'` or `'claude-sonnet-4-6'`; use `config.local_llm.model` and `config.claude.model`
 7. **No dead config** — if you add a field to `src/config/schema.ts`, wire it up somewhere
 8. **Never commit directly to `main`** — always create a branch (`git checkout -b feat/<name>` or `fix/<name>`), make changes there, then open a PR with `gh pr create`
+9. **`schema.ts` is the single source of truth for defaults** — `locode.yaml` and `setup.ts` CONFIG_TEMPLATE must agree with the Zod defaults in `src/config/schema.ts`. When changing a default, update the schema first, then sync the others
+10. **Path comparisons need a trailing separator** — never use `path.startsWith(base)` for directory containment checks; use `path === base || path.startsWith(base + path.sep)` to prevent sibling-directory traversal (e.g., `/tmp/repo-evil` matching `/tmp/repo`)
+11. **No regex backtracking hazards** — CodeQL runs on every PR. Avoid alternation patterns like `(?:A|B)*` where A and B can match the same input. Prefer simple line-based scans over complex multi-line regex when parsing config/YAML
 
 ## Key Files
 
@@ -89,6 +92,12 @@ Key rules:
 ## Test Structure
 
 Each module has a co-located test file (`*.test.ts`). External dependencies (Ollama, Anthropic SDK) are mocked with `vi.mock()`. Tests live in `src/` — `dist/` is excluded via `vitest.config.ts`.
+
+**Test quality rules:**
+- Tests must call the real function under test — never reimplement its logic inline in the test
+- Mock tool/function names must match the actual registry (e.g., `run_command` not `shell`)
+- Test names must match what the assertion actually checks
+- Assert behavior and outcomes, not implementation details (e.g., don't assert exact shell command strings when testing "installs successfully")
 
 ## Adding Features
 

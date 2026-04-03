@@ -67,6 +67,7 @@ export class PersistentContextCache {
     return crypto.createHash('sha256').update(fs.readFileSync(filePath, 'utf8')).digest('hex')
   }
 
+  // Eviction is FIFO by write time, not LRU — get() does not refresh recency.
   private evictIfNeeded(): void {
     const entries = this.listEntries()
 

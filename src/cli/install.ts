@@ -32,18 +32,20 @@ export function installOllama(): void {
     try {
       execFileSync('which', ['brew'], { encoding: 'utf8' })
       console.log('Installing via Homebrew...')
-      execSync('brew install ollama', { stdio: 'inherit' })
+      execFileSync('brew', ['install', 'ollama'], { stdio: 'inherit' })
       return
     } catch {
       // brew not available
     }
     console.log('Homebrew not found. Installing via official install script...')
+    // Shell pipe required: curl output is piped to sh for the official installer
     execSync('curl -fsSL https://ollama.com/install.sh | sh', { stdio: 'inherit' })
     return
   }
 
   if (platform === 'linux') {
     console.log('Installing via official install script...')
+    // Shell pipe required: curl output is piped to sh for the official installer
     execSync('curl -fsSL https://ollama.com/install.sh | sh', { stdio: 'inherit' })
     return
   }
@@ -65,7 +67,7 @@ export function startOllama(): void {
     })
     child.unref()
     // Give it a moment to start
-    execSync('sleep 2')
+    execFileSync('sleep', ['2'])
   }
 }
 

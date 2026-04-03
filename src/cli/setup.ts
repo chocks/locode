@@ -45,11 +45,23 @@ export function writeGlobalConfig(model: string, locodeDir: string = LOCODE_DIR)
     fs.writeFileSync(yamlPath, CONFIG_TEMPLATE(model))
     return
   }
-  // Update the local_llm model line in the existing config
+  // Update the local_llm.model line by scanning for the section header,
+  // then replacing the first `model:` key found within it.
   const lines = fs.readFileSync(yamlPath, 'utf8').split('\n')
+  let inLocalLlm = false
   let replaced = false
   const updated = lines.map(line => {
-    if (!replaced && line.match(/^\s+model:/)) {
+    if (replaced) return line
+    if (line.startsWith('local_llm:')) {
+      inLocalLlm = true
+      return line
+    }
+    // A non-indented, non-blank, non-comment line starts a new section
+    if (inLocalLlm && line.length > 0 && !line.startsWith(' ') && !line.startsWith('\t') && !line.startsWith('#')) {
+      inLocalLlm = false
+      return line
+    }
+    if (inLocalLlm && line.match(/^\s+model:\s/)) {
       replaced = true
       return line.replace(/model:\s*.+/, `model: ${model}`)
     }
@@ -99,9 +111,9 @@ function askMasked(question: string): Promise<string> {
   })
 }
 
-export function loadEnvFile(): void {
-  if (!fs.existsSync(ENV_FILE)) return
-  const lines = fs.readFileSync(ENV_FILE, 'utf8').split('\n')
+export function loadEnvFile(envPath: string = ENV_FILE): void {
+  if (!fs.existsSync(envPath)) return
+  const lines = fs.readFileSync(envPath, 'utf8').split('\n')
   for (const line of lines) {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#')) continue

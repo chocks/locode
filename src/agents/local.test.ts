@@ -103,7 +103,7 @@ describe('LocalAgent', () => {
       .mockResolvedValueOnce({
         message: {
           content: '',
-          tool_calls: [{ function: { name: 'shell', arguments: { command: 'echo hello' } } }],
+          tool_calls: [{ function: { name: 'run_command', arguments: { command: 'echo hello' } } }],
         },
         prompt_eval_count: 30,
         eval_count: 5,
@@ -184,7 +184,7 @@ describe('LocalAgent', () => {
 
   it('includes tool_calls in assistant message history', async () => {
 
-    const toolCalls = [{ function: { name: 'shell', arguments: { command: 'ls' } } }]
+    const toolCalls = [{ function: { name: 'run_command', arguments: { command: 'ls' } } }]
     mockChat
       .mockResolvedValueOnce({
         message: {
