@@ -11,6 +11,8 @@ export interface RunArtifactInput {
   reason: string
   summary: string
   content: string
+  inputTokens?: number
+  outputTokens?: number
   metadata?: Record<string, unknown>
 }
 
@@ -33,11 +35,26 @@ export class RunArtifactStore {
       createdAt: new Date().toISOString(),
     }
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2))
+    fs.writeFileSync(path.join(runDir, 'result.json'), JSON.stringify({
+      summary: input.summary,
+      content: input.content,
+      tokens: {
+        input: input.inputTokens ?? 0,
+        output: input.outputTokens ?? 0,
+      },
+    }, null, 2))
     fs.writeFileSync(path.join(runDir, 'prompt.txt'), input.prompt)
     fs.writeFileSync(path.join(runDir, 'content.txt'), input.content)
     fs.writeFileSync(path.join(runDir, 'summary.txt'), input.summary)
     if (input.metadata) {
       fs.writeFileSync(path.join(runDir, 'metadata.json'), JSON.stringify(input.metadata, null, 2))
+      fs.writeFileSync(path.join(runDir, 'debug.json'), JSON.stringify(input.metadata, null, 2))
+      if (Array.isArray(input.metadata.edits)) {
+        fs.writeFileSync(path.join(runDir, 'edits.json'), JSON.stringify(input.metadata.edits, null, 2))
+      }
+      if (Array.isArray(input.metadata.diffs)) {
+        fs.writeFileSync(path.join(runDir, 'diffs.patch'), input.metadata.diffs.join('\n\n'))
+      }
     }
 
     return { runDir, filePath }

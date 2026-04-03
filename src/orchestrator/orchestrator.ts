@@ -288,6 +288,9 @@ export class Orchestrator {
       diffs: result.diffs,
       iterations: result.iterations,
       validationPassed: result.validationPassed,
+      plan: result.plan,
+      analyzeToolCalls: result.analyzeToolCalls,
+      promptBudget: result.promptBudget,
     })
     return finalResult
   }
@@ -335,6 +338,8 @@ export class Orchestrator {
         reason: result.reason,
         summary: result.summary,
         content: result.content,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
         metadata,
       })
     } catch {
