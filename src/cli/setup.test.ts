@@ -26,6 +26,29 @@ describe('writeGlobalConfig', () => {
     expect(content).toContain('model: qwen2.5-coder:14b')
     expect(content).not.toContain('model: qwen3:8b')
   })
+
+  it('updates the local_llm model when config has comment lines in the section', () => {
+    const yamlPath = path.join(tmpDir, 'locode.yaml')
+    fs.writeFileSync(yamlPath, [
+      'local_llm:',
+      '  provider: ollama',
+      '  # Recommended models:',
+      '  #   gemma4:9b — balanced',
+      '  #   llama3.1:8b — general purpose',
+      '  model: llama3.1:8b',
+      '  base_url: http://localhost:11434',
+      '',
+      'claude:',
+      '  model: claude-sonnet-4-6',
+      '',
+    ].join('\n'))
+    writeGlobalConfig('gemma4:9b', tmpDir)
+    const content = fs.readFileSync(yamlPath, 'utf8')
+    expect(content).toContain('model: gemma4:9b')
+    expect(content).not.toContain('model: llama3.1:8b')
+    // Must not touch claude.model
+    expect(content).toContain('model: claude-sonnet-4-6')
+  })
 })
 
 describe('loadEnvFile', () => {

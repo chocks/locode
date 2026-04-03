@@ -45,10 +45,11 @@ export function writeGlobalConfig(model: string, locodeDir: string = LOCODE_DIR)
     fs.writeFileSync(yamlPath, CONFIG_TEMPLATE(model))
     return
   }
-  // Update the local_llm.model line — look for model: under the local_llm section
+  // Update the local_llm.model line — match model: under the local_llm section,
+  // tolerating comment lines, blank lines, and other keys in between.
   const content = fs.readFileSync(yamlPath, 'utf8')
   const updated = content.replace(
-    /(local_llm:\s*\n(?:\s+\w+:.*\n)*?\s+)model:\s*.+/,
+    /(local_llm:\s*\n(?:[ \t]+.*\n|\s*\n)*?[ \t]+)model:\s*.+/,
     `$1model: ${model}`,
   )
   fs.writeFileSync(yamlPath, updated)
