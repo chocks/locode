@@ -2,7 +2,7 @@
 
 **Started:** 2026-03-22
 **Design:** [v0.3.5 Agent Hardening + Performance](2026-03-22-v035-agent-hardening-performance.md)
-**Current branch:** `feat/v035-artifacts-budget`
+**Current branch:** `feat/v035-final-hardening`
 **Checkpoint commit:** `50556f5`
 **Approach:** Incremental slices with clean commit checkpoints
 
@@ -23,8 +23,8 @@ The `v0.3.5` milestone is complete when all of the following are checked:
 - [x] Deterministic fast-path retrieval is in place for obvious file context
 - [x] Analyze-context caching exists in memory and can persist across runs
 - [x] Prompt budgeting is enforced at the run level, not only as per-file truncation
-- [ ] Patch generation and fallback behavior are robust enough for repeated retry flows
-- [ ] Persistent cache cleanup/eviction policy is implemented and bounded
+- [x] Patch generation and fallback behavior are robust enough for repeated retry flows
+- [x] Persistent cache cleanup/eviction policy is implemented and bounded
 
 ### Completed
 
@@ -60,11 +60,12 @@ The `v0.3.5` milestone is complete when all of the following are checked:
 - Coding agent attaches lightweight preconditions to generated edits
 - Coding agent is rebuilt after MCP tool registration so coding-mode sees updated tools
 - Default repo context now includes `AGENTS.md` and `CLAUDE.md`
+- Patch application now falls back to strict exact-hunk replacement when unified patch application fails
+- Persistent context cache is now bounded by configurable entry-count and total-size limits
 
 ### Remaining to Finish v0.3.5
 
-- [ ] Improve patch-generation robustness and fallback behavior
-- [ ] Add a bounded cleanup/eviction policy for persistent context cache growth
+- None
 
 ### Explicitly Deferred Beyond v0.3.5
 
@@ -108,10 +109,8 @@ The `v0.3.5` milestone is complete when all of the following are checked:
 
 ## Recommended Next Slice
 
-1. Improve patch-generation robustness and fallback behavior
-2. Tighten cache eviction/cleanup policy if the on-disk cache grows too much
-3. Mark `v0.3.5` complete once those two boxes are done
-4. Leave richer artifact replay/viewer tooling and workflow-intent integration for later milestones
+1. Start the next milestone rather than extending `v0.3.5`
+2. Leave richer artifact replay/viewer tooling and workflow-intent integration for later milestones
 
 ---
 
@@ -120,4 +119,4 @@ The `v0.3.5` milestone is complete when all of the following are checked:
 - Branch is safe to continue from directly
 - Current PR for this slice: `#63`
 - The current commit is a good PR checkpoint if needed
-- If resuming later, focus on patch-generation robustness next, then cache eviction, then stop `v0.3.5`
+- `v0.3.5` is complete; resume from the next milestone instead of extending this slice

@@ -54,6 +54,16 @@ agent:
   run_validation: true
   # validation_command: "npm test"
 
+performance:
+  parallel_reads: 4
+  warm_index_on_startup: true
+  cache_context: true
+  cache_dir: .locode/context-cache
+  cache_max_entries: 200
+  cache_max_bytes: 5242880
+  max_prompt_chars: 24000
+  lazy_semantic_search: true
+
 # mcp_servers:
 #   linear:
 #     type: remote

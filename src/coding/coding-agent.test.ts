@@ -46,6 +46,8 @@ const defaultPerformance: PerformanceConfig = {
   warm_index_on_startup: true,
   cache_context: true,
   cache_dir: '.locode/context-cache',
+  cache_max_entries: 200,
+  cache_max_bytes: 5 * 1024 * 1024,
   max_prompt_chars: 24000,
   lazy_semantic_search: true,
 }

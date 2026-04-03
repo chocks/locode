@@ -61,7 +61,13 @@ export class Orchestrator {
     this.taskClassifier = new TaskClassifier()
     const runtimeConfig = { ...DEFAULT_RUNTIME_CONFIG, ...config.runtime }
     this.artifactStore = new RunArtifactStore(runtimeConfig.artifacts_dir)
-    this.persistentContextCache = new PersistentContextCache(config.performance?.cache_dir ?? '.locode/context-cache')
+    this.persistentContextCache = new PersistentContextCache(
+      config.performance?.cache_dir ?? '.locode/context-cache',
+      {
+        maxEntries: config.performance?.cache_max_entries ?? 200,
+        maxBytes: config.performance?.cache_max_bytes ?? 5 * 1024 * 1024,
+      },
+    )
     const registry = createDefaultRegistry()
     const safetyGate = new SafetyGate(config.safety)
     this.toolExecutor = new ToolExecutor(registry, safetyGate)
