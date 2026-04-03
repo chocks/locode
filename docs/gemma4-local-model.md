@@ -9,13 +9,19 @@ Gemma 4 works with the existing Ollama integration — no code changes required 
 - `thinking` config flag to control Ollama's `think` parameter (on by default it was silently unset, causing thinking models to burn tokens on every tool round)
 - `num_ctx` raised from 4096 → 8192 in the default config (Gemma 4's native window is 128k; 4096 was leaving quality on the table)
 
+Current product stance:
+
+- keep `llama3.1:8b` as the current default because it is the safer validated tool-calling baseline
+- treat `gemma4:9b` as the recommended upgrade to evaluate locally
+- only flip the hard default after the dedicated tool-calling eval passes cleanly
+
 ## Model Options
 
 | Model | Ollama tag | RAM (4-bit) | Notes |
 |---|---|---|---|
 | Gemma 4 E2B | `gemma4:2b` | ~3 GB | Fast; may struggle with multi-step tool use |
 | Gemma 4 E4B | `gemma4:4b` | ~4 GB | Good for simple routing/search tasks |
-| Gemma 4 9B | `gemma4:9b` | ~7 GB | **Recommended** — best quality/speed trade-off |
+| Gemma 4 9B | `gemma4:9b` | ~7 GB | Recommended upgrade candidate — best quality/speed trade-off |
 | Gemma 4 27B | `gemma4:27b` | ~18 GB | Near-Claude quality locally; supports thinking mode |
 
 Unsloth GGUF variants are available on Hugging Face (`unsloth/gemma-4-31B-it-GGUF`) and can be loaded into Ollama via a custom Modelfile pointing to the `.gguf` file.
@@ -49,7 +55,7 @@ local_llm:
 
 Ollama's `think` parameter enables chain-of-thought tokens that are hidden from the final response. Before this change the main tool loop omitted `think` entirely — Ollama interprets that as the model's default, which for thinking-capable models means reasoning tokens are generated (and counted) on every round. Setting `think: false` explicitly suppresses them unless opted in via `thinking: true` in config.
 
-## Comparison vs llama3.1:8b (Previous Default)
+## Comparison vs llama3.1:8b (Current Default)
 
 | | llama3.1:8b | gemma4:9b |
 |---|---|---|

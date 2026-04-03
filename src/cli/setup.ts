@@ -71,10 +71,10 @@ export function writeGlobalConfig(model: string, locodeDir: string = LOCODE_DIR)
 }
 
 const SUGGESTED_MODELS = [
-  { name: 'qwen3:8b', description: 'Recommended — fast, excellent for code (default)' },
-  { name: 'qwen3:14b', description: 'More capable, needs ~10GB RAM' },
-  { name: 'qwen3:4b', description: 'Lightweight, very fast' },
-  { name: 'llama3.2:3b', description: 'General purpose, very fast' },
+  { name: 'llama3.1:8b', description: 'Default — safest current baseline for tool calling' },
+  { name: 'gemma4:9b', description: 'Recommended upgrade to evaluate — better upside, less validated' },
+  { name: 'gemma4:27b', description: 'High-quality local option, needs ~18GB RAM and benefits from thinking mode' },
+  { name: 'llama3.2:3b', description: 'Lightweight fallback for constrained machines' },
 ]
 
 function ask(rl: readline.Interface, question: string): Promise<string> {

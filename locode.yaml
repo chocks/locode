@@ -1,11 +1,11 @@
 local_llm:
   provider: ollama
   # Recommended models (install via `ollama pull <model>`):
-  #   gemma4:2b          — fast, ~3 GB RAM, good for simple tasks
-  #   gemma4:9b          — balanced quality/speed, ~7 GB RAM  (recommended)
-  #   gemma4:27b         — best quality, ~18 GB RAM
-  #   llama3.1:8b        — solid general-purpose alternative
-  model: qwen3:8b
+  #   llama3.1:8b        — safest current baseline for tool calling (default)
+  #   gemma4:9b          — recommended upgrade to evaluate, ~7 GB RAM
+  #   gemma4:27b         — best local quality, ~18 GB RAM
+  #   gemma4:2b          — lightweight option for simpler tasks
+  model: llama3.1:8b
   base_url: http://localhost:11434
   # Set thinking: true for hybrid-thinking variants (e.g. gemma4:27b).
   # This enables extended reasoning tokens; output <think> blocks are
