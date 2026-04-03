@@ -10,6 +10,7 @@ import { runUpdate } from './cli/update'
 import { runSetup, loadEnvFile } from './cli/setup'
 import { runBenchmark, resolvePrompts } from './cli/benchmark'
 import { getEvalTaskIds, runLocalModelEval } from './cli/eval-local-models'
+import { runRecommendLocalModel } from './cli/recommend-local-model'
 import { createSpinner } from './cli/spinner'
 import { preflight } from './cli/preflight'
 import path from 'path'
@@ -120,7 +121,7 @@ program
   .command('eval-local-models')
   .description('Evaluate local-model tool-calling reliability against a fixed task suite')
   .option('-c, --config <path>', 'path to locode.yaml', getDefaultConfigPath())
-  .option('-v, --variant <spec>', 'variant spec, e.g. "gemma4:9b" or "label=gemma,model=gemma4:9b,num_ctx=8192"', (val: string, acc: string[]) => [...acc, val], [] as string[])
+  .option('-v, --variant <spec>', 'variant spec, e.g. "gemma4:e4b" or "label=gemma,model=gemma4:e4b,num_ctx=8192"', (val: string, acc: string[]) => [...acc, val], [] as string[])
   .option('-r, --runs <n>', 'number of runs per variant', '3')
   .option('-o, --output <path>', 'path to save the JSON report', '.locode/evals/local-model-eval.json')
   .option('-t, --task <id>', 'run only a specific task id (repeatable)', (val: string, acc: string[]) => [...acc, val], [] as string[])
@@ -139,6 +140,20 @@ program
       output: path.resolve(opts.output),
       taskIds: opts.task,
       verbose: opts.verbose,
+    })
+  })
+
+program
+  .command('recommend-local-model')
+  .description('Recommend the best local model for this machine from a saved eval report')
+  .option('-r, --report <path>', 'path to a JSON report from eval-local-models', '.locode/evals/local-model-eval.json')
+  .option('--json', 'print the recommendation as JSON')
+  .option('--top <n>', 'number of top-ranked candidates to show', '3')
+  .action((opts) => {
+    runRecommendLocalModel({
+      reportPath: path.resolve(opts.report),
+      json: opts.json,
+      top: Number.parseInt(opts.top, 10) || 3,
     })
   })
 

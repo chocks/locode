@@ -43,6 +43,7 @@ Routing Logic
 | `locode update` | Update locode to the latest version |
 | `locode benchmark` | Compare token cost across routing modes |
 | `locode eval-local-models` | Compare local models on tool-calling reliability |
+| `locode recommend-local-model` | Pick the best evaluated local model for this machine |
 
 ### Flags
 
@@ -66,7 +67,54 @@ Edit `locode.yaml` for routing rules, models, and thresholds:
 Type `stats` in the REPL to see token usage and estimated savings.
 
 Current default: `llama3.1:8b` is the conservative tool-calling baseline.
-Recommended upgrade to evaluate locally: `gemma4:9b`.
+There is no single recommended replacement model. Evaluate the models that make sense for your hardware, then pick the winner from your own results.
+
+## Choosing A Local Model
+
+Start by evaluating the models you actually want to compare:
+
+```bash
+locode eval-local-models \
+  --variant llama3.1:8b \
+  --variant gemma4:e4b \
+  --variant qwen2.5-coder:7b
+```
+
+You can include larger options if your machine can support them:
+
+```bash
+locode eval-local-models \
+  --variant llama3.1:8b \
+  --variant qwen2.5-coder:14b \
+  --variant devstral:24b \
+  --variant mistral-small:24b
+```
+
+Structured variants also work when you want to tune context or thinking mode:
+
+```bash
+locode eval-local-models \
+  --variant "label=llama-baseline,model=llama3.1:8b,num_ctx=8192" \
+  --variant "label=gemma-thinking,model=gemma4:27b,thinking=true,num_ctx=16384"
+```
+
+The report is written to `.locode/evals/local-model-eval.json` by default. After running your comparison, ask Locode to recommend the best option for the current machine:
+
+```bash
+locode recommend-local-model
+```
+
+To use a different report file:
+
+```bash
+locode recommend-local-model --report /path/to/local-model-eval.json
+```
+
+The recommendation command:
+
+- detects platform, CPU count, and total RAM
+- filters out models that likely exceed the machine's memory budget
+- ranks the remaining models by eval reliability first, then latency and token cost
 
 ## Telemetry (Opt-in)
 

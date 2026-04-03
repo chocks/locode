@@ -86,7 +86,7 @@ const DEFAULT_OUTPUT = '.locode/evals/local-model-eval.json'
 
 const DEFAULT_VARIANTS: EvalVariant[] = [
   { label: 'llama3.1-baseline', model: 'llama3.1:8b', thinking: false, numCtx: 8192 },
-  { label: 'gemma4-candidate', model: 'gemma4:9b', thinking: false, numCtx: 8192 },
+  { label: 'gemma4-candidate', model: 'gemma4:e4b', thinking: false, numCtx: 8192 },
 ]
 
 const AUTO_APPROVED_EVAL_TOOLS = [

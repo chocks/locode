@@ -72,7 +72,7 @@ export function writeGlobalConfig(model: string, locodeDir: string = LOCODE_DIR)
 
 const SUGGESTED_MODELS = [
   { name: 'llama3.1:8b', description: 'Default — safest current baseline for tool calling' },
-  { name: 'gemma4:9b', description: 'Recommended upgrade to evaluate — better upside, less validated' },
+  { name: 'gemma4:e4b', description: 'Recommended Gemma 4 candidate to evaluate — available Ollama tag, less validated' },
   { name: 'gemma4:27b', description: 'High-quality local option, needs ~18GB RAM and benefits from thinking mode' },
   { name: 'llama3.2:3b', description: 'Lightweight fallback for constrained machines' },
 ]

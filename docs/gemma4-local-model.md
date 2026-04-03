@@ -12,7 +12,7 @@ Gemma 4 works with the existing Ollama integration — no code changes required 
 Current product stance:
 
 - keep `llama3.1:8b` as the current default because it is the safer validated tool-calling baseline
-- treat `gemma4:9b` as the recommended upgrade to evaluate locally
+- treat `gemma4:e4b` as the recommended Gemma 4 candidate to evaluate locally
 - only flip the hard default after the dedicated tool-calling eval passes cleanly
 
 ## Model Options
@@ -20,8 +20,7 @@ Current product stance:
 | Model | Ollama tag | RAM (4-bit) | Notes |
 |---|---|---|---|
 | Gemma 4 E2B | `gemma4:2b` | ~3 GB | Fast; may struggle with multi-step tool use |
-| Gemma 4 E4B | `gemma4:4b` | ~4 GB | Good for simple routing/search tasks |
-| Gemma 4 9B | `gemma4:9b` | ~7 GB | Recommended upgrade candidate — best quality/speed trade-off |
+| Gemma 4 E4B | `gemma4:e4b` | ~4 GB | Current available mid-tier Ollama tag; recommended candidate to evaluate |
 | Gemma 4 27B | `gemma4:27b` | ~18 GB | Near-Claude quality locally; supports thinking mode |
 
 Unsloth GGUF variants are available on Hugging Face (`unsloth/gemma-4-31B-it-GGUF`) and can be loaded into Ollama via a custom Modelfile pointing to the `.gguf` file.
@@ -29,14 +28,14 @@ Unsloth GGUF variants are available on Hugging Face (`unsloth/gemma-4-31B-it-GGU
 ## Switching to Gemma 4
 
 ```bash
-ollama pull gemma4:9b
+ollama pull gemma4:e4b
 ```
 
 Then in `locode.yaml`:
 
 ```yaml
 local_llm:
-  model: gemma4:9b
+  model: gemma4:e4b
   options:
     num_ctx: 8192   # or higher if RAM allows; Gemma 4 supports up to 128k
 ```
@@ -57,16 +56,16 @@ Ollama's `think` parameter enables chain-of-thought tokens that are hidden from 
 
 ## Comparison vs llama3.1:8b (Current Default)
 
-| | llama3.1:8b | gemma4:9b |
+| | llama3.1:8b | gemma4:e4b |
 |---|---|---|
-| RAM (4-bit) | ~6 GB | ~7 GB |
+| RAM (4-bit) | ~6 GB | ~4 GB |
 | Context window | 8k native | 128k native |
 | Tool calling | Native, reliable | Native, reliable |
-| Code quality | Good | Better on most benchmarks |
+| Code quality | Good | Lighter Gemma 4 option; validate on tool-calling eval first |
 | Thinking mode | No | Yes (opt-in) |
 | Ollama support | Mature | Available as of Gemma 4 release |
 
-`gemma4:9b` is a straightforward upgrade at similar resource cost. The 2B variant is viable for pure routing/search tasks where Claude handles the heavy lifting.
+`gemma4:e4b` is the practical Gemma 4 comparison point in Ollama right now. The 2B variant is viable for pure routing/search tasks where Claude handles the heavy lifting, and `gemma4:27b` remains the higher-end option if you have the RAM.
 
 ## Known Unknowns
 
