@@ -428,7 +428,7 @@ describe('LocalAgent', () => {
     const configWithThinking = {
       local_llm: {
         provider: 'ollama' as const,
-        model: 'gemma4:9b',
+        model: 'gemma4:e4b',
         base_url: 'http://localhost:11434',
         thinking: true,
       },
@@ -444,7 +444,7 @@ describe('LocalAgent', () => {
     const configWithThinking = {
       local_llm: {
         provider: 'ollama' as const,
-        model: 'gemma4:9b',
+        model: 'gemma4:e4b',
         base_url: 'http://localhost:11434',
         thinking: false,
       },

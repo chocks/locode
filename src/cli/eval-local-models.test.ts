@@ -6,9 +6,9 @@ import type { AgentResult } from '../agents/local'
 
 describe('parseVariantSpec', () => {
   it('parses a bare model name into a default variant', () => {
-    expect(parseVariantSpec('gemma4:9b')).toEqual({
-      label: 'gemma4-9b',
-      model: 'gemma4:9b',
+    expect(parseVariantSpec('gemma4:e4b')).toEqual({
+      label: 'gemma4-e4b',
+      model: 'gemma4:e4b',
       thinking: false,
     })
   })
@@ -23,14 +23,14 @@ describe('parseVariantSpec', () => {
   })
 
   it('rejects unknown keys', () => {
-    expect(() => parseVariantSpec('model=gemma4:9b,foo=bar')).toThrow('unknown variant key')
+    expect(() => parseVariantSpec('model=gemma4:e4b,foo=bar')).toThrow('unknown variant key')
   })
 })
 
 describe('resolveEvalVariants', () => {
   it('returns the default comparison pair when no variants are provided', () => {
-    expect(getDefaultEvalVariants().map(variant => variant.model)).toEqual(['llama3.1:8b', 'gemma4:9b'])
-    expect(resolveEvalVariants(undefined).map(variant => variant.model)).toEqual(['llama3.1:8b', 'gemma4:9b'])
+    expect(getDefaultEvalVariants().map(variant => variant.model)).toEqual(['llama3.1:8b', 'gemma4:e4b'])
+    expect(resolveEvalVariants(undefined).map(variant => variant.model)).toEqual(['llama3.1:8b', 'gemma4:e4b'])
   })
 })
 

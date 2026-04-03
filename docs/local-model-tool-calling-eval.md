@@ -17,7 +17,7 @@ That makes tool-calling reliability the main gating metric for changing the defa
 ## Current product stance
 
 - Current default: `llama3.1:8b`
-- Recommended upgrade to evaluate: `gemma4:9b`
+- Recommended Gemma 4 variant to evaluate: `gemma4:e4b`
 - Do not flip the hard default to Gemma 4 until it performs well on the task suite below
 
 ## Command
@@ -29,7 +29,7 @@ locode eval-local-models
 This runs the default comparison:
 
 - `llama3.1:8b`
-- `gemma4:9b`
+- `gemma4:e4b`
 
 and writes a JSON report to:
 
@@ -44,7 +44,7 @@ Bare model names:
 ```bash
 locode eval-local-models \
   --variant llama3.1:8b \
-  --variant gemma4:9b
+  --variant gemma4:e4b
 ```
 
 Structured variants:

@@ -33,7 +33,7 @@ describe('writeGlobalConfig', () => {
       'local_llm:',
       '  provider: ollama',
       '  # Recommended models:',
-      '  #   gemma4:9b — balanced',
+      '  #   gemma4:e4b — balanced',
       '  #   llama3.1:8b — general purpose',
       '  model: llama3.1:8b',
       '  base_url: http://localhost:11434',
@@ -42,9 +42,9 @@ describe('writeGlobalConfig', () => {
       '  model: claude-sonnet-4-6',
       '',
     ].join('\n'))
-    writeGlobalConfig('gemma4:9b', tmpDir)
+    writeGlobalConfig('gemma4:e4b', tmpDir)
     const content = fs.readFileSync(yamlPath, 'utf8')
-    expect(content).toContain('model: gemma4:9b')
+    expect(content).toContain('model: gemma4:e4b')
     expect(content).not.toContain('model: llama3.1:8b')
     // Must not touch claude.model
     expect(content).toContain('model: claude-sonnet-4-6')

@@ -2,7 +2,7 @@ local_llm:
   provider: ollama
   # Recommended models (install via `ollama pull <model>`):
   #   llama3.1:8b        — safest current baseline for tool calling (default)
-  #   gemma4:9b          — recommended upgrade to evaluate, ~7 GB RAM
+  #   gemma4:e4b         — recommended Gemma 4 candidate to evaluate, ~4 GB RAM
   #   gemma4:27b         — best local quality, ~18 GB RAM
   #   gemma4:2b          — lightweight option for simpler tasks
   model: llama3.1:8b
