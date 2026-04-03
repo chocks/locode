@@ -5,7 +5,7 @@ import type { EditOperation } from './types'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { createTwoFilesPatch } from 'diff'
+import * as diff from 'diff'
 
 describe('CodeEditor', () => {
   let editor: CodeEditor
@@ -163,7 +163,7 @@ describe('CodeEditor', () => {
       const original = 'function a() {\n  return 1\n}\n\nfunction b() {\n  return 2\n}\n'
       const updated = 'function a() {\n  return 10\n}\n\nfunction b() {\n  return 20\n}\n'
       const file = writeFixture('patch.ts', original)
-      const unifiedDiff = createTwoFilesPatch(file, file, original, updated)
+      const unifiedDiff = diff.createTwoFilesPatch(file, file, original, updated)
       const edits: EditOperation[] = [{
         file,
         operation: 'patch',
@@ -172,6 +172,36 @@ describe('CodeEditor', () => {
       const result = await editor.applyEdits(edits)
       expect(result.applied).toHaveLength(1)
       expect(fs.readFileSync(file, 'utf8')).toBe(updated)
+    })
+
+    it('falls back to exact hunk replacement when a patch hunk cannot be applied by line numbers', async () => {
+      const original = 'function a() {\n  return 1\n}\n\nfunction b() {\n  return 2\n}\n'
+      const updated = 'function a() {\n  return 10\n}\n\nfunction b() {\n  return 20\n}\n'
+      const file = writeFixture('patch-fallback.ts', original)
+      const strictPatch = diff.createTwoFilesPatch(file, file, original, updated)
+
+      const result = (editor as unknown as {
+        applyPatchByExactHunks: (content: string, unifiedDiff: string, file: string) => string | false
+      }).applyPatchByExactHunks(original, strictPatch, file)
+
+      expect(result).toBe(updated)
+    })
+
+    it('rejects patch fallback when the removed block is ambiguous', async () => {
+      const original = 'const value = 1\nconst value = 1\n'
+      const file = writeFixture('patch-ambiguous.ts', original)
+      const applyFallback = (editor as unknown as {
+        applyPatchByExactHunks: (content: string, unifiedDiff: string, file: string) => string | false
+      }).applyPatchByExactHunks.bind(editor)
+
+      expect(() => applyFallback(original, [
+        `--- ${file}`,
+        `+++ ${file}`,
+        '@@ -99,1 +99,1 @@',
+        '-const value = 1',
+        '+const value = 2',
+        '',
+      ].join('\n'), file)).toThrow('multiple locations')
     })
   })
 

@@ -138,6 +138,8 @@ describe('ConfigSchema', () => {
     const result = ConfigSchema.parse(baseConfig)
     expect(result.performance.parallel_reads).toBe(4)
     expect(result.performance.cache_dir).toBe('.locode/context-cache')
+    expect(result.performance.cache_max_entries).toBe(200)
+    expect(result.performance.cache_max_bytes).toBe(5 * 1024 * 1024)
     expect(result.performance.max_prompt_chars).toBe(24000)
     expect(result.performance.lazy_semantic_search).toBe(true)
   })

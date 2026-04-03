@@ -9,8 +9,19 @@ interface CachedContextRecord {
   fileHashes: Record<string, string>
 }
 
+interface PersistentContextCacheOptions {
+  maxEntries: number
+  maxBytes: number
+}
+
 export class PersistentContextCache {
-  constructor(private baseDir: string) {}
+  constructor(
+    private baseDir: string,
+    private options: PersistentContextCacheOptions = {
+      maxEntries: 200,
+      maxBytes: 5 * 1024 * 1024,
+    },
+  ) {}
 
   async get(prompt: string): Promise<GatheredContext | null> {
     const filePath = this.cacheFile(prompt)
@@ -44,6 +55,7 @@ export class PersistentContextCache {
       fileHashes,
     }
     fs.writeFileSync(this.cacheFile(prompt), JSON.stringify(payload, null, 2))
+    this.evictIfNeeded()
   }
 
   private cacheFile(prompt: string): string {
@@ -53,5 +65,40 @@ export class PersistentContextCache {
 
   private hashFile(filePath: string): string {
     return crypto.createHash('sha256').update(fs.readFileSync(filePath, 'utf8')).digest('hex')
+  }
+
+  private evictIfNeeded(): void {
+    const entries = this.listEntries()
+
+    while (entries.length > this.options.maxEntries) {
+      const evicted = entries.shift()
+      if (!evicted) break
+      fs.rmSync(evicted.path, { force: true })
+    }
+
+    let totalBytes = entries.reduce((sum, entry) => sum + entry.size, 0)
+    while (entries.length > 1 && totalBytes > this.options.maxBytes) {
+      const evicted = entries.shift()
+      if (!evicted) break
+      fs.rmSync(evicted.path, { force: true })
+      totalBytes -= evicted.size
+    }
+  }
+
+  private listEntries(): Array<{ path: string; size: number; mtimeMs: number }> {
+    if (!fs.existsSync(this.baseDir)) return []
+
+    return fs.readdirSync(this.baseDir)
+      .filter(file => file.endsWith('.json'))
+      .map(file => {
+        const entryPath = path.join(this.baseDir, file)
+        const stat = fs.statSync(entryPath)
+        return {
+          path: entryPath,
+          size: stat.size,
+          mtimeMs: stat.mtimeMs,
+        }
+      })
+      .sort((a, b) => a.mtimeMs - b.mtimeMs || a.path.localeCompare(b.path))
   }
 }

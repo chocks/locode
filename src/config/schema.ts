@@ -38,6 +38,8 @@ export const PerformanceConfigSchema = z.object({
   warm_index_on_startup: z.boolean().default(true),
   cache_context: z.boolean().default(true),
   cache_dir: z.string().default('.locode/context-cache'),
+  cache_max_entries: z.number().int().min(1).default(200),
+  cache_max_bytes: z.number().int().min(1024).default(5 * 1024 * 1024),
   max_prompt_chars: z.number().int().positive().default(24000),
   lazy_semantic_search: z.boolean().default(true),
 })
@@ -88,6 +90,8 @@ export const ConfigSchema = z.object({
     warm_index_on_startup: true,
     cache_context: true,
     cache_dir: '.locode/context-cache',
+    cache_max_entries: 200,
+    cache_max_bytes: 5 * 1024 * 1024,
     max_prompt_chars: 24000,
     lazy_semantic_search: true,
   }),

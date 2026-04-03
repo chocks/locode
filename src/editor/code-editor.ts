@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
-import { applyPatch, createTwoFilesPatch } from 'diff'
+import { applyPatch, createTwoFilesPatch, parsePatch } from 'diff'
 import type { SafetyGate } from '../tools/safety-gate'
 import type { EditOperation, ApplyResult, DiffPreview } from './types'
 
@@ -180,11 +180,51 @@ export class CodeEditor {
 
   private applyPatchEdit(content: string, edit: EditOperation): string {
     const patch = edit.patch!
-    const modified = applyPatch(content, patch.unifiedDiff)
+    try {
+      const modified = applyPatch(content, patch.unifiedDiff)
+      if (modified !== false) {
+        return modified
+      }
+    } catch {
+      // Fall back to strict exact-match hunk replacement below.
+    }
+
+    const modified = this.applyPatchByExactHunks(content, patch.unifiedDiff, edit.file)
     if (modified === false) {
       throw new Error(`Unified patch could not be applied to ${edit.file}`)
     }
     return modified
+  }
+
+  private applyPatchByExactHunks(content: string, unifiedDiff: string, file: string): string | false {
+    const parsed = parsePatch(unifiedDiff)
+    if (parsed.length !== 1) {
+      return false
+    }
+
+    let nextContent = content
+    for (const hunk of parsed[0].hunks) {
+      const source = hunk.lines
+        .filter(line => line.startsWith(' ') || line.startsWith('-'))
+        .map(line => line.slice(1))
+        .join('\n')
+      const target = hunk.lines
+        .filter(line => line.startsWith(' ') || line.startsWith('+'))
+        .map(line => line.slice(1))
+        .join('\n')
+
+      const occurrences = nextContent.split(source).length - 1
+      if (occurrences === 0) {
+        throw new Error(`Unified patch fallback could not find exact hunk in ${file}`)
+      }
+      if (occurrences > 1) {
+        throw new Error(`Unified patch fallback matched multiple locations in ${file}`)
+      }
+
+      nextContent = nextContent.replace(source, target)
+    }
+
+    return nextContent
   }
 
   private applyLineEdit(content: string, edit: EditOperation): string {
