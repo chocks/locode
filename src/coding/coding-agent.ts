@@ -19,6 +19,7 @@ import type { Planner } from './planner'
 import type { AgentMemory } from './memory'
 import type { PerformanceConfig } from '../config/schema'
 import { PersistentContextCache } from '../runtime/persistent-context-cache'
+import type { ContextRetriever } from '../context/context-retriever'
 
 interface LLMAgent {
   run(prompt: string, previousSummary?: string, repoContext?: string): Promise<AgentResult>
@@ -80,6 +81,7 @@ export class CodingAgent extends EventEmitter {
     private config: AgentConfig,
     private performance?: PerformanceConfig,
     private persistentCache: PersistentContextCache | null = null,
+    private contextRetriever: ContextRetriever | null = null,
   ) {
     super()
   }
@@ -235,6 +237,34 @@ export class CodingAgent extends EventEmitter {
       if (cached) {
         const gathered = this.applyPromptBudgetToGatheredContext(cached, promptBudget)
         this.contextCache.set(cacheKey, gathered)
+        return {
+          gathered,
+          tokensUsed: { input: 0, output: 0 },
+          toolCalls: [],
+        }
+      }
+    }
+
+    if (this.contextRetriever) {
+      const retrieved = await this.contextRetriever.retrieve(prompt)
+      if (retrieved.confidence >= (this.performance?.lazy_semantic_search !== false ? 0.7 : 0.5)) {
+        const gathered = this.applyPromptBudgetToGatheredContext(
+          {
+            files: retrieved.files,
+            searchResults: retrieved.searchResults,
+            memory: retrieved.memory,
+          },
+          promptBudget,
+        )
+        if (this.performance?.cache_context) {
+          this.contextCache.set(cacheKey, gathered)
+          if (this.persistentCache) {
+            await this.persistentCache.set(prompt, gathered)
+          }
+        }
+        for (const file of retrieved.files) {
+          this.memory.record({ type: 'file_read', detail: file.path })
+        }
         return {
           gathered,
           tokensUsed: { input: 0, output: 0 },

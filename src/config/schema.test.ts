@@ -143,4 +143,88 @@ describe('ConfigSchema', () => {
     expect(result.performance.max_prompt_chars).toBe(24000)
     expect(result.performance.lazy_semantic_search).toBe(true)
   })
+
+  it('defaults index config when omitted', () => {
+    const result = ConfigSchema.parse(baseConfig)
+    expect(result.index.enabled).toBe(true)
+    expect(result.index.ignore).toContain('node_modules')
+    expect(result.index.ignore).toContain('dist')
+    expect(result.index.ignore).toContain('.git')
+    expect(result.index.languages).toContain('typescript')
+    expect(result.index.languages).toContain('javascript')
+    expect(result.index.chunk_size).toBe(50)
+    expect(result.index.storage_dir).toBe('.locode/index')
+    expect(result.index.auto_update).toBe(true)
+  })
+
+  it('accepts custom index config', () => {
+    const result = ConfigSchema.parse({
+      ...baseConfig,
+      index: {
+        enabled: false,
+        ignore: ['build', 'vendor'],
+        languages: ['typescript', 'go'],
+        chunk_size: 100,
+        storage_dir: '.cache/index',
+        auto_update: false,
+      },
+    })
+    expect(result.index.enabled).toBe(false)
+    expect(result.index.ignore).toEqual(['build', 'vendor'])
+    expect(result.index.languages).toEqual(['typescript', 'go'])
+    expect(result.index.chunk_size).toBe(100)
+    expect(result.index.storage_dir).toBe('.cache/index')
+    expect(result.index.auto_update).toBe(false)
+  })
+
+  it('rejects non-positive chunk_size', () => {
+    expect(() => ConfigSchema.parse({
+      ...baseConfig,
+      index: { chunk_size: 0 },
+    })).toThrow()
+  })
+
+  it('defaults context_retrieval config when omitted', () => {
+    const result = ConfigSchema.parse(baseConfig)
+    expect(result.context_retrieval.max_files).toBe(5)
+    expect(result.context_retrieval.max_tokens_per_file).toBe(2000)
+    expect(result.context_retrieval.max_total_tokens).toBe(8000)
+    expect(result.context_retrieval.strategy).toBe('deterministic-first')
+    expect(result.context_retrieval.confidence_threshold).toBe(0.7)
+  })
+
+  it('accepts custom context_retrieval config', () => {
+    const result = ConfigSchema.parse({
+      ...baseConfig,
+      context_retrieval: {
+        max_files: 10,
+        max_tokens_per_file: 4000,
+        max_total_tokens: 16000,
+        strategy: 'semantic-first',
+        confidence_threshold: 0.85,
+      },
+    })
+    expect(result.context_retrieval.max_files).toBe(10)
+    expect(result.context_retrieval.max_total_tokens).toBe(16000)
+    expect(result.context_retrieval.strategy).toBe('semantic-first')
+    expect(result.context_retrieval.confidence_threshold).toBe(0.85)
+  })
+
+  it('rejects context_retrieval confidence_threshold out of range', () => {
+    expect(() => ConfigSchema.parse({
+      ...baseConfig,
+      context_retrieval: { confidence_threshold: 1.5 },
+    })).toThrow()
+    expect(() => ConfigSchema.parse({
+      ...baseConfig,
+      context_retrieval: { confidence_threshold: -0.1 },
+    })).toThrow()
+  })
+
+  it('rejects invalid context_retrieval strategy', () => {
+    expect(() => ConfigSchema.parse({
+      ...baseConfig,
+      context_retrieval: { strategy: 'random' },
+    })).toThrow()
+  })
 })

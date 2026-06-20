@@ -44,8 +44,31 @@ export const PerformanceConfigSchema = z.object({
   lazy_semantic_search: z.boolean().default(true),
 })
 
+export const IndexConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  ignore: z.array(z.string()).default([
+    'node_modules', 'dist', '.git', 'coverage', '*.min.js', '*.lock',
+  ]),
+  languages: z.array(z.string()).default([
+    'typescript', 'javascript', 'python', 'go', 'rust',
+  ]),
+  chunk_size: z.number().int().positive().default(50),
+  storage_dir: z.string().default('.locode/index'),
+  auto_update: z.boolean().default(true),
+})
+
+export const ContextRetrievalConfigSchema = z.object({
+  max_files: z.number().int().min(1).default(5),
+  max_tokens_per_file: z.number().int().positive().default(2000),
+  max_total_tokens: z.number().int().positive().default(8000),
+  strategy: z.enum(['deterministic-first', 'semantic-first']).default('deterministic-first'),
+  confidence_threshold: z.number().min(0).max(1).default(0.7),
+})
+
 export const DEFAULT_RUNTIME_CONFIG = RuntimeConfigSchema.parse({})
 export const DEFAULT_PERFORMANCE_CONFIG = PerformanceConfigSchema.parse({})
+export const DEFAULT_INDEX_CONFIG = IndexConfigSchema.parse({})
+export const DEFAULT_CONTEXT_RETRIEVAL_CONFIG = ContextRetrievalConfigSchema.parse({})
 
 export const ConfigSchema = z.object({
   local_llm: z.object({
@@ -95,6 +118,8 @@ export const ConfigSchema = z.object({
     max_prompt_chars: 24000,
     lazy_semantic_search: true,
   }),
+  index: IndexConfigSchema.default(DEFAULT_INDEX_CONFIG),
+  context_retrieval: ContextRetrievalConfigSchema.default(DEFAULT_CONTEXT_RETRIEVAL_CONFIG),
   mcp_servers: z.record(z.string(), McpServerSchema).default({}),
   safety: z.object({
     always_confirm: z.array(z.string()).default([]),
@@ -111,3 +136,5 @@ export const ConfigSchema = z.object({
 
 export type Config = z.infer<typeof ConfigSchema>
 export type PerformanceConfig = z.infer<typeof PerformanceConfigSchema>
+export type IndexConfig = z.infer<typeof IndexConfigSchema>
+export type ContextRetrievalConfig = z.infer<typeof ContextRetrievalConfigSchema>

@@ -17,6 +17,11 @@ import { TaskClassifier, type TaskIntent } from './task-classifier'
 import { RunArtifactStore } from '../runtime/run-artifact-store'
 import type { ApprovalHandler } from '../tools/executor'
 import { PersistentContextCache } from '../runtime/persistent-context-cache'
+import { CodebaseIndexer } from '../index/indexer'
+import { ContextRetriever } from '../context/context-retriever'
+import { createSymbolLookupTool } from '../tools/definitions/symbol-lookup'
+import type { IndexConfig as IndexerConfig } from '../index/types'
+import type { RetrievalConfig } from '../context/types'
 
 function isRateLimitError(err: unknown): boolean {
   return err instanceof Error && 'status' in err && (err as { status: number }).status === 429
@@ -54,6 +59,8 @@ export class Orchestrator {
   private taskClassifier: TaskClassifier
   private artifactStore: RunArtifactStore
   private persistentContextCache: PersistentContextCache
+  private codebaseIndexer: CodebaseIndexer | null = null
+  private contextRetriever: ContextRetriever | null = null
 
   constructor(config: Config, localAgent?: LocalAgent, claudeAgent?: ClaudeAgent, options?: OrchestratorOptions) {
     this.config = config
@@ -84,6 +91,7 @@ export class Orchestrator {
     this.verbose = options?.verbose ?? false
     this.repoContext = loadRepoContext(config.context.repo_context_files, config.context.max_file_bytes)
 
+    this.initCodebaseIndex(registry)
     this.rebuildCodingAgent(safetyGate)
   }
 
@@ -305,8 +313,67 @@ export class Orchestrator {
     return this.codingAgent
   }
 
+  getCodebaseIndexer(): CodebaseIndexer | null {
+    return this.codebaseIndexer
+  }
+
+  async buildCodebaseIndex(): Promise<{ files: number; symbols: number; buildTimeMs: number } | null> {
+    if (!this.codebaseIndexer) return null
+    const stats = await this.codebaseIndexer.buildAll()
+    await this.codebaseIndexer.save()
+    const registry = this.toolExecutor.registry
+    if (!registry.get('symbol_lookup')) {
+      registry.register(createSymbolLookupTool(this.codebaseIndexer))
+    }
+    this.buildContextRetriever()
+    this.rebuildCodingAgent(new SafetyGate(this.config.safety))
+    return stats
+  }
+
   getStats() { return this.tracker.getStats() }
   resetStats() { this.tracker.reset() }
+
+  private initCodebaseIndex(registry: ReturnType<typeof createDefaultRegistry>): void {
+    if (!this.config.index?.enabled) return
+    const indexConfig: IndexerConfig = {
+      root: process.cwd(),
+      ignore: this.config.index.ignore,
+      languages: this.config.index.languages,
+      storage_dir: this.config.index.storage_dir,
+      auto_update: this.config.index.auto_update,
+    }
+    this.codebaseIndexer = new CodebaseIndexer(indexConfig)
+    try {
+      this.codebaseIndexer.load().then(() => {
+        if (this.codebaseIndexer?.isIndexed()) {
+          registry.register(createSymbolLookupTool(this.codebaseIndexer))
+          this.buildContextRetriever()
+          this.rebuildCodingAgent(new SafetyGate(this.config.safety))
+        }
+      }).catch(() => {
+        // No saved index — user can build one with `locode index` (future command)
+      })
+    } catch {
+      // Index loading is non-fatal
+    }
+  }
+
+  private buildContextRetriever(): void {
+    if (!this.codebaseIndexer || !this.codebaseIndexer.isIndexed()) return
+    const crConfig = this.config.context_retrieval
+    const retrievalConfig: RetrievalConfig = {
+      max_files: crConfig.max_files,
+      max_tokens_per_file: crConfig.max_tokens_per_file,
+      max_total_tokens: crConfig.max_total_tokens,
+      strategy: crConfig.strategy,
+      confidence_threshold: crConfig.confidence_threshold,
+    }
+    this.contextRetriever = new ContextRetriever(
+      this.codebaseIndexer,
+      retrievalConfig,
+      { root: process.cwd(), memory: new AgentMemory().getSnapshot() },
+    )
+  }
 
   private rebuildCodingAgent(safetyGate: SafetyGate): void {
     if (!this.config.agent) {
@@ -316,6 +383,19 @@ export class Orchestrator {
     const codeEditor = new CodeEditor(safetyGate, process.cwd())
     const planner = new Planner(this.localAgent, this.claudeAgent)
     const agentMemory = new AgentMemory()
+    if (this.contextRetriever && this.codebaseIndexer?.isIndexed()) {
+      this.contextRetriever = new ContextRetriever(
+        this.codebaseIndexer,
+        {
+          max_files: this.config.context_retrieval.max_files,
+          max_tokens_per_file: this.config.context_retrieval.max_tokens_per_file,
+          max_total_tokens: this.config.context_retrieval.max_total_tokens,
+          strategy: this.config.context_retrieval.strategy,
+          confidence_threshold: this.config.context_retrieval.confidence_threshold,
+        },
+        { root: process.cwd(), memory: agentMemory.getSnapshot() },
+      )
+    }
     this.codingAgent = new CodingAgent(
       this.localAgent,
       this.localOnly ? null : this.claudeAgent,
@@ -326,6 +406,7 @@ export class Orchestrator {
       this.config.agent,
       this.config.performance,
       this.persistentContextCache,
+      this.contextRetriever,
     )
   }
 

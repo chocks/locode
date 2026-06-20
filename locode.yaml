@@ -64,6 +64,32 @@ performance:
   max_prompt_chars: 24000
   lazy_semantic_search: true
 
+index:
+  enabled: true
+  ignore:
+    - node_modules
+    - dist
+    - .git
+    - coverage
+    - "*.min.js"
+    - "*.lock"
+  languages:
+    - typescript
+    - javascript
+    - python
+    - go
+    - rust
+  chunk_size: 50
+  storage_dir: .locode/index
+  auto_update: true
+
+context_retrieval:
+  max_files: 5
+  max_tokens_per_file: 2000
+  max_total_tokens: 8000
+  strategy: deterministic-first
+  confidence_threshold: 0.7
+
 # mcp_servers:
 #   linear:
 #     type: remote
